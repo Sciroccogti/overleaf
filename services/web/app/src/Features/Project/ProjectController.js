@@ -38,8 +38,6 @@ const InstitutionsFeatures = require('../Institutions/InstitutionsFeatures')
 const ProjectAuditLogHandler = require('./ProjectAuditLogHandler')
 const PublicAccessLevels = require('../Authorization/PublicAccessLevels')
 
-const VISUAL_EDITOR_NAMING_SPLIT_TEST_MIN_SIGNUP_DATE = new Date('2023-04-17')
-
 /**
  * @typedef {import("./types").GetProjectsRequest} GetProjectsRequest
  * @typedef {import("./types").GetProjectsResponse} GetProjectsResponse
@@ -345,7 +343,7 @@ const ProjectController = {
     const userId = SessionManager.getLoggedInUserId(req.session)
     ProjectGetter.findAllUsersProjects(
       userId,
-      'name lastUpdated publicAccesLevel archived trashed owner_ref tokens',
+      'name lastUpdated publicAccesLevel archived trashed owner_ref',
       (err, projects) => {
         if (err != null) {
           return next(err)
@@ -558,60 +556,6 @@ const ProjectController = {
             }
           )
         },
-        participatingInVisualEditorNamingTest: [
-          'user',
-          (results, cb) => {
-            const isNewUser =
-              results.user.signUpDate >=
-              VISUAL_EDITOR_NAMING_SPLIT_TEST_MIN_SIGNUP_DATE
-            cb(null, isNewUser)
-          },
-        ],
-        visualEditorNameAssignment: [
-          'participatingInVisualEditorNamingTest',
-          (results, cb) => {
-            if (!results.participatingInVisualEditorNamingTest) {
-              cb(null, { variant: 'default' })
-            } else {
-              SplitTestHandler.getAssignment(
-                req,
-                res,
-                'visual-editor-name',
-                (error, assignment) => {
-                  if (error) {
-                    cb(null, { variant: 'default' })
-                  } else {
-                    cb(null, assignment)
-                  }
-                }
-              )
-            }
-          },
-        ],
-        legacySourceEditorAssignment: [
-          'participatingInVisualEditorNamingTest',
-          'visualEditorNameAssignment',
-          (results, cb) => {
-            // Hide Ace for people in the Rich Text naming test
-            if (results.participatingInVisualEditorNamingTest) {
-              cb(null, { variant: 'true' })
-            } else {
-              SplitTestHandler.getAssignment(
-                req,
-                res,
-                'source-editor-legacy',
-                (error, assignment) => {
-                  // do not fail editor load if assignment fails
-                  if (error) {
-                    cb(null, { variant: 'default' })
-                  } else {
-                    cb(null, assignment)
-                  }
-                }
-              )
-            }
-          },
-        ],
         pdfjsAssignment(cb) {
           SplitTestHandler.getAssignment(
             req,
@@ -739,11 +683,11 @@ const ProjectController = {
             cb()
           })
         },
-        onboardingVideoTourAssignment(cb) {
+        sourceEditorToolbarAssigment(cb) {
           SplitTestHandler.getAssignment(
             req,
             res,
-            'onboarding-video-tour',
+            'source-editor-toolbar',
             (error, assignment) => {
               // do not fail editor load if assignment fails
               if (error) {
@@ -769,69 +713,18 @@ const ProjectController = {
             }
           )
         },
-        accessCheckForOldCompileDomainAssigment(cb) {
+        reviewPanelAssignment(cb) {
           SplitTestHandler.getAssignment(
             req,
             res,
-            'access-check-for-old-compile-domain',
-            () => {
-              // We'll pick up the assignment from the res.locals assignment.
-              cb()
-            }
-          )
-        },
-        forceNewDomainAssignment(cb) {
-          SplitTestHandler.getAssignment(
-            req,
-            res,
-            'force-new-compile-domain',
-            () => {
-              // We'll pick up the assignment from the res.locals assignment.
-              cb()
-            }
-          )
-        },
-        userContentDomainAccessCheckAssigment(cb) {
-          SplitTestHandler.getAssignment(
-            req,
-            res,
-            'user-content-domain-access-check',
-            () => {
-              // We'll pick up the assignment from the res.locals assignment.
-              cb()
-            }
-          )
-        },
-        userContentDomainAccessCheckDelayAssigment(cb) {
-          SplitTestHandler.getAssignment(
-            req,
-            res,
-            'user-content-domain-access-check-delay',
-            () => {
-              // We'll pick up the assignment from the res.locals assignment.
-              cb()
-            }
-          )
-        },
-        userContentDomainAccessCheckMaxChecksAssigment(cb) {
-          SplitTestHandler.getAssignment(
-            req,
-            res,
-            'user-content-domain-access-check-max-checks',
-            () => {
-              // We'll pick up the assignment from the res.locals assignment.
-              cb()
-            }
-          )
-        },
-        reportUserContentDomainAccessCheckErrorAssigment(cb) {
-          SplitTestHandler.getAssignment(
-            req,
-            res,
-            'report-user-content-domain-access-check-error',
-            () => {
-              // We'll pick up the assignment from the res.locals assignment.
-              cb()
+            'review-panel',
+            (error, assignment) => {
+              // do not fail editor load if assignment fails
+              if (error) {
+                cb(null, { variant: 'default' })
+              } else {
+                cb(null, assignment)
+              }
             }
           )
         },
@@ -848,14 +741,12 @@ const ProjectController = {
           isTokenMember,
           isInvitedMember,
           brandVariation,
-          visualEditorNameAssignment,
-          participatingInVisualEditorNamingTest,
-          legacySourceEditorAssignment,
           pdfjsAssignment,
           editorLeftMenuAssignment,
           richTextAssignment,
-          onboardingVideoTourAssignment,
+          sourceEditorToolbarAssigment,
           historyViewAssignment,
+          reviewPanelAssignment,
         }
       ) => {
         if (err != null) {
@@ -941,10 +832,7 @@ const ProjectController = {
             const showLegacySourceEditor =
               !Features.hasFeature('saas') ||
               // Allow override via legacy_source_editor=true in query string
-              shouldDisplayFeature('legacy_source_editor') ||
-              // Hide Ace for beta users
-              (!user.betaProgram &&
-                legacySourceEditorAssignment.variant === 'default')
+              shouldDisplayFeature('legacy_source_editor')
 
             const editorLeftMenuReact =
               editorLeftMenuAssignment?.variant === 'react'
@@ -971,12 +859,6 @@ const ProjectController = {
               !userIsMemberOfGroupSubscription &&
               !userHasInstitutionLicence
 
-            const showOnboardingVideoTour =
-              Features.hasFeature('saas') &&
-              userId &&
-              onboardingVideoTourAssignment.variant === 'active' &&
-              req.session.justRegistered
-
             const showPersonalAccessToken =
               !Features.hasFeature('saas') ||
               req.query?.personal_access_token === 'true'
@@ -985,10 +867,6 @@ const ProjectController = {
               detachRole === 'detached'
                 ? 'project/editor_detached'
                 : 'project/editor'
-
-            const isParticipatingInVisualEditorNamingTest =
-              Features.hasFeature('saas') &&
-              participatingInVisualEditorNamingTest
 
             let richTextVariant
             if (!Features.hasFeature('saas')) {
@@ -1048,10 +926,6 @@ const ProjectController = {
               editorThemes: THEME_LIST,
               legacyEditorThemes: LEGACY_THEME_LIST,
               maxDocLength: Settings.max_doc_length,
-              useV2History:
-                project.overleaf &&
-                project.overleaf.history &&
-                Boolean(project.overleaf.history.display),
               brandVariation,
               allowedImageNames,
               gitBridgePublicBaseUrl: Settings.gitBridgePublicBaseUrl,
@@ -1060,10 +934,12 @@ const ProjectController = {
               showTemplatesServerPro,
               pdfjsVariant: pdfjsAssignment.variant,
               debugPdfDetach,
-              isParticipatingInVisualEditorNamingTest,
-              visualEditorNameVariant: visualEditorNameAssignment.variant,
               showLegacySourceEditor,
+              showSourceToolbar:
+                !showLegacySourceEditor &&
+                sourceEditorToolbarAssigment.variant === 'enabled',
               showSymbolPalette,
+              symbolPaletteAvailable: Features.hasFeature('symbol-palette'),
               galileoEnabled,
               galileoFeatures,
               galileoPromptWords,
@@ -1074,9 +950,10 @@ const ProjectController = {
               useOpenTelemetry: Settings.useOpenTelemetryClient,
               showCM6SwitchAwaySurvey: Settings.showCM6SwitchAwaySurvey,
               richTextVariant,
-              showOnboardingVideoTour,
               historyViewReact: historyViewAssignment.variant === 'react',
+              isReviewPanelReact: reviewPanelAssignment.variant === 'react',
               showPersonalAccessToken,
+              hasTrackChangesFeature: Features.hasFeature('track-changes'),
             })
             timer.done()
           }
@@ -1216,7 +1093,6 @@ const ProjectController = {
     // If a project is simultaneously trashed and archived, we will consider it archived but not trashed.
     const trashed = ProjectHelper.isTrashed(project, userId) && !archived
 
-    TokenAccessHandler.protectTokens(project, accessLevel)
     const model = {
       id: project._id,
       name: project.name,

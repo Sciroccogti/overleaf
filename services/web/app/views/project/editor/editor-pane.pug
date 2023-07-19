@@ -22,6 +22,7 @@
 		include ./file-view
 
 		.editor-container.full-size(
+			class={"has-source-toolbar" : showSourceToolbar},
 			ng-show="ui.view == 'editor' && editor.multiSelectedCount === 0"
 			vertical-resizable-panes="south-pane-resizer"
 			vertical-resizable-panes-hidden-externally-on="south-pane-toggled"
@@ -53,9 +54,9 @@
 					include ../../source-editor/source-editor
 				div(ng-if="!editor.newSourceEditor")
 					include ./source-editor
-
-				if !isRestrictedTokenMember
-							include ./review-panel
+				div(ng-if="!editor.newSourceEditor || !reviewPanel.isReact")
+					if !isRestrictedTokenMember
+						include ./review-panel
 
 			if moduleIncludesAvailable('editor:symbol-palette') || moduleIncludesAvailable('editor:galileo')
 				.div(vertical-resizable-bottom)

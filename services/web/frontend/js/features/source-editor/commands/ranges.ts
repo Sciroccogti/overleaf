@@ -1,5 +1,10 @@
 import { EditorView } from '@codemirror/view'
-import { EditorSelection, EditorState, SelectionRange } from '@codemirror/state'
+import {
+  EditorSelection,
+  EditorState,
+  SelectionRange,
+  TransactionSpec,
+} from '@codemirror/state'
 import {
   ensureSyntaxTree,
   foldedRanges,
@@ -11,6 +16,7 @@ import {
   ancestorOfNodeWithType,
   isUnknownCommandWithName,
 } from '../utils/tree-query'
+import { lastAncestorAtEndPosition } from '../utils/tree-operations/ancestors'
 
 export const wrapRanges =
   (
@@ -216,19 +222,10 @@ function getParentNode(
   let node: SyntaxNode | undefined | null = null
   if (typeof position === 'number') {
     node = tree?.resolveInner(position, assoc)?.parent
-    // HACK: Spaces after UnknownCommands (and other commands without arguments)
-    // are included in the Command node. So we have to adjust for that here.
-    const preceedingCharacter = state.sliceDoc(
-      Math.max(0, position - 1),
-      position
-    )
-    if (
-      preceedingCharacter === ' ' &&
-      ['UnknownCommand', 'Item', 'Left', 'Right'].some(name =>
-        node?.type.is(name)
-      )
-    ) {
-      node = ancestorOfNodeWithType(node, 'Command')?.parent
+
+    const ancestorAtEndPos = lastAncestorAtEndPosition(node, position)
+    if (ancestorAtEndPos?.parent) {
+      node = ancestorAtEndPos.parent
     }
   } else {
     node = position?.parent
@@ -276,9 +273,7 @@ function moveRange(range: SelectionRange, newFrom: number, newTo: number) {
 
 function validateReplacement(expected: string, actual: string) {
   if (expected !== actual) {
-    throw new Error(
-      `Replacement in toggleRange failed validation. Expected ${expected} got ${actual}`
-    )
+    throw new Error('Replacement in toggleRange failed validation.')
   }
 }
 
@@ -418,7 +413,10 @@ function bubbleUpRange(
   return range
 }
 
-export function toggleRanges(command: string) {
+export function toggleRanges(
+  command: string,
+  annotations?: TransactionSpec['annotations']
+) {
   /* There are a number of situations we need to handle in this function.
    * In the following examples, the selection range is marked within <>
 
@@ -755,7 +753,7 @@ export function toggleRanges(command: string) {
         // Shouldn't happen, but default to just wrapping the content
         return wrapRangeInCommand(view.state, range, command)
       }),
-      { scrollIntoView: true }
+      { scrollIntoView: true, annotations }
     )
     return true
   }

@@ -61,11 +61,15 @@ import {
   InputCtrlSeq,
   IncludeCtrlSeq,
   ItemCtrlSeq,
+  NewTheoremCtrlSeq,
+  TheoremStyleCtrlSeq,
   BibliographyCtrlSeq,
   BibliographyStyleCtrlSeq,
   CenteringCtrlSeq,
   ListEnvName,
   MaketitleCtrlSeq,
+  TextColorCtrlSeq,
+  ColorBoxCtrlSeq,
 } from './latex.terms.mjs'
 
 function nameChar(ch) {
@@ -169,11 +173,9 @@ export const lstinlineTokenizer = new ExternalTokenizer(
       delimiter = CHAR_CLOSE_BRACE
     }
     input.advance()
-    let content = ''
     for (;;) {
-      let next = input.next
+      const next = input.next
       if (next === -1 || next === CHAR_NEWLINE) return
-      content += String.fromCharCode(next)
       input.advance()
       if (next === delimiter) break
     }
@@ -634,9 +636,13 @@ const otherKnowncommands = {
   '\\include': IncludeCtrlSeq,
   '\\item': ItemCtrlSeq,
   '\\centering': CenteringCtrlSeq,
+  '\\newtheorem': NewTheoremCtrlSeq,
+  '\\theoremstyle': TheoremStyleCtrlSeq,
   '\\bibliography': BibliographyCtrlSeq,
   '\\bibliographystyle': BibliographyStyleCtrlSeq,
   '\\maketitle': MaketitleCtrlSeq,
+  '\\textcolor': TextColorCtrlSeq,
+  '\\colorbox': ColorBoxCtrlSeq,
 }
 // specializer for control sequences
 // return new tokens for specific control sequences
@@ -720,6 +726,8 @@ const equationArrayEnvNames = new Set([
   'cases*',
   'dcases',
   'dcases*',
+  'rcases',
+  'rcases*',
   'IEEEeqnarray',
   'IEEEeqnarray*',
 ])
@@ -739,6 +747,7 @@ const otherKnownEnvNames = {
   document: DocumentEnvName,
   tikzpicture: TikzPictureEnvName,
   figure: FigureEnvName,
+  'figure*': FigureEnvName,
   subfigure: FigureEnvName,
   enumerate: ListEnvName,
   itemize: ListEnvName,

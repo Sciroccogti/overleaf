@@ -1,13 +1,12 @@
 extends ../layout-marketing
 
-include ./_new_mixins
-
 block entrypointVar
 	- entrypoint = 'pages/user/subscription/new'
 
 block vars
 	- var suppressNavbarRight = true
 	- var suppressFooter = true
+	- var suppressCookieBanner = true
 
 block append meta
 	meta(name="ol-countryCode" content=countryCode)

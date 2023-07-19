@@ -24,6 +24,10 @@ export function createToolbarPanel() {
   return { dom, top: true }
 }
 
+/**
+ * A panel which contains the editor toolbar, provided by a state field which allows the toolbar to be toggled,
+ * and styles for the toolbar.
+ */
 export const toolbarPanel = () => [
   toolbarState,
   EditorView.theme({
@@ -67,10 +71,20 @@ export const toolbarPanel = () => [
       },
       '& .list-group': {
         marginBottom: 0,
+        backgroundColor: 'var(--editor-toolbar-bg)',
       },
       '& .list-group-item': {
         width: '100%',
         textAlign: 'start',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '5px',
+        color: 'var(--toolbar-btn-color)',
+        borderColor: 'var(--editor-toolbar-bg)',
+        background: 'none',
+        '&:hover, &:focus': {
+          backgroundColor: 'rgba(125, 125, 125, 0.2)',
+        },
       },
     },
     '.ol-cm-toolbar-button-group': {
@@ -86,6 +100,9 @@ export const toolbarPanel = () => [
         '&.ol-cm-toolbar-end': {
           borderLeft: 'none',
         },
+        '&.ol-cm-toolbar-stretch': {
+          flex: 1,
+        },
         '&.overflow-hidden': {
           borderLeft: 'none',
         },
@@ -94,6 +111,9 @@ export const toolbarPanel = () => [
         width: 0,
         padding: 0,
       },
+    },
+    '.formatting-buttons-wrapper': {
+      flex: 1,
     },
     '.ol-cm-toolbar-button': {
       display: 'inline-flex',
@@ -112,15 +132,16 @@ export const toolbarPanel = () => [
         backgroundColor: 'rgba(125, 125, 125, 0.1)',
         color: 'inherit',
         boxShadow: 'none',
-        '&[disabled]': {
+        '&[aria-disabled="true"]': {
           opacity: '0.2',
         },
       },
       '&.active, &:active': {
         backgroundColor: 'rgba(125, 125, 125, 0.2)',
       },
-      '&[disabled]': {
+      '&[aria-disabled="true"]': {
         opacity: '0.2',
+        cursor: 'not-allowed',
       },
       '.overflow-hidden &': {
         display: 'none',
@@ -139,13 +160,15 @@ export const toolbarPanel = () => [
       '&.active, &:active': {
         backgroundColor: 'rgba(125, 125, 125, 0.4)',
       },
-      '&[disabled]': {
+      '&[aria-disabled="true"]': {
         opacity: 0.2,
       },
     },
     '.ol-cm-toolbar-end': {
-      flex: 1,
       justifyContent: 'flex-end',
+      '& .badge': {
+        marginRight: '5px',
+      },
     },
     '.ol-cm-toolbar-overflow-toggle': {
       display: 'none',

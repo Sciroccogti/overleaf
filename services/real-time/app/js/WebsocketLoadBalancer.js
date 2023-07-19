@@ -179,9 +179,18 @@ module.exports = WebsocketLoadBalancer = {
               client.emit('project:access:revoked')
               client.disconnect()
             } else {
-              if (
-                !(isRestrictedMessage && client.ol_context.is_restricted_user)
-              ) {
+              if (isRestrictedMessage && client.ol_context.is_restricted_user) {
+                // hide restricted message
+                logger.debug(
+                  {
+                    message,
+                    clientId: client.id,
+                    userId: client.ol_context.user_id,
+                    projectId: client.ol_context.project_id,
+                  },
+                  'hiding restricted message from client'
+                )
+              } else {
                 client.emit(message.message, ...message.payload)
               }
             }

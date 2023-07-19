@@ -1,4 +1,11 @@
-import { EditorSelection, StateEffect, Line, Text } from '@codemirror/state'
+import {
+  EditorSelection,
+  StateEffect,
+  Line,
+  Text,
+  StateField,
+  EditorState,
+} from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { hasEffect, updateHasEffect } from '../../utils/effects'
 
@@ -57,7 +64,11 @@ export const mouseDownEffect = StateEffect.define<boolean>()
 export const hasMouseDownEffect = hasEffect(mouseDownEffect)
 export const updateHasMouseDownEffect = updateHasEffect(mouseDownEffect)
 
-export const mouseDownListener = EditorView.domEventHandlers({
+/**
+ * A listener for mousedown and mouseup events, dispatching an event
+ * to record the current mousedown status, which is stored in a state field.
+ */
+const mouseDownListener = EditorView.domEventHandlers({
   mousedown: (event, view) => {
     // not wrapped in a timeout, so update listeners know that the mouse is down before they process the selection
     view.dispatch({
@@ -73,3 +84,28 @@ export const mouseDownListener = EditorView.domEventHandlers({
     })
   },
 })
+
+const mousedownSelectionState = StateField.define<EditorSelection | undefined>({
+  create() {
+    return undefined
+  },
+  update(value, tr) {
+    if (value && tr.docChanged) {
+      value = value.map(tr.changes)
+    }
+
+    for (const effect of tr.effects) {
+      // store the previous selection on mousedown
+      if (effect.is(mouseDownEffect)) {
+        value = effect.value ? tr.startState.selection : undefined
+      }
+    }
+
+    return value
+  },
+})
+
+export const getMousedownSelection = (state: EditorState) =>
+  state.field(mousedownSelectionState)
+
+export const mousedown = [mouseDownListener, mousedownSelectionState]

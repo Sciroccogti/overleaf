@@ -3,61 +3,16 @@ import useScopeValue from '../../../shared/hooks/use-scope-value'
 import Tooltip from '../../../shared/components/tooltip'
 import { sendMB } from '../../../infrastructure/event-tracking'
 import getMeta from '../../../utils/meta'
-import SplitTestBadge from '../../../shared/components/split-test-badge'
 import isValidTeXFile from '../../../main/is-valid-tex-file'
 import { useTranslation } from 'react-i18next'
-
-function Badge() {
-  const content = (
-    <>
-      Overleaf has upgraded the source editor. You can still use the old editor
-      by selecting "Source (legacy)".
-      <br />
-      <br />
-      Click to learn more and give feedback
-    </>
-  )
-
-  return (
-    <Tooltip
-      id="editor-switch"
-      description={content}
-      overlayProps={{
-        placement: 'bottom',
-        delayHide: 100,
-      }}
-      tooltipProps={{ className: 'tooltip-wide' }}
-    >
-      <a
-        href="https://forms.gle/GmSs6odZRKRp3VX98"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="info-badge"
-      >
-        <span className="sr-only">{content}</span>
-      </a>
-    </Tooltip>
-  )
-}
-
-const showLegacySourceEditor: boolean = getMeta('ol-showLegacySourceEditor')
-const visualEditorNameVariant: string = getMeta('ol-visualEditorNameVariant')
-const isParticipatingInVisualEditorNamingTest: boolean = getMeta(
-  'ol-isParticipatingInVisualEditorNamingTest'
-)
+import SplitTestBadge from '../../../shared/components/split-test-badge'
 
 function EditorSwitch() {
+  const { t } = useTranslation()
   const [newSourceEditor, setNewSourceEditor] = useScopeValue(
     'editor.newSourceEditor'
   )
   const [richText, setRichText] = useScopeValue('editor.showRichText')
-  const sourceName =
-    visualEditorNameVariant === 'code-visual'
-      ? 'Code Editor'
-      : visualEditorNameVariant === 'source-visual'
-      ? 'Source Editor'
-      : 'Source'
-
   const [visual, setVisual] = useScopeValue('editor.showVisual')
 
   const [docName] = useScopeValue('editor.open_doc_name')
@@ -101,8 +56,6 @@ function EditorSwitch() {
 
   return (
     <div className="editor-toggle-switch">
-      {showLegacySourceEditor ? <Badge /> : null}
-
       <fieldset className="toggle-switch">
         <legend className="sr-only">Editor mode.</legend>
 
@@ -116,25 +69,8 @@ function EditorSwitch() {
           onChange={handleChange}
         />
         <label htmlFor="editor-switch-cm6" className="toggle-switch-label">
-          <span>{sourceName}</span>
+          <span>{t('code_editor')}</span>
         </label>
-
-        {showLegacySourceEditor ? (
-          <>
-            <input
-              type="radio"
-              name="editor"
-              value="ace"
-              id="editor-switch-ace"
-              className="toggle-switch-input"
-              checked={!richTextOrVisual && !newSourceEditor}
-              onChange={handleChange}
-            />
-            <label htmlFor="editor-switch-ace" className="toggle-switch-label">
-              <span>Source (legacy)</span>
-            </label>
-          </>
-        ) : null}
 
         <RichTextToggle
           checked={!!richTextOrVisual}
@@ -143,7 +79,7 @@ function EditorSwitch() {
         />
       </fieldset>
 
-      {!!richTextOrVisual && !isParticipatingInVisualEditorNamingTest && (
+      {!!richTextOrVisual && (
         <SplitTestBadge splitTestName="rich-text" displayOnVariants={['cm6']} />
       )}
     </div>
@@ -156,9 +92,6 @@ const RichTextToggle: FC<{
   handleChange: (event: ChangeEvent<HTMLInputElement>) => void
 }> = ({ checked, disabled, handleChange }) => {
   const { t } = useTranslation()
-
-  const richTextName =
-    visualEditorNameVariant === 'default' ? 'Rich Text' : 'Visual Editor'
 
   const toggle = (
     <span>
@@ -173,7 +106,7 @@ const RichTextToggle: FC<{
         disabled={disabled}
       />
       <label htmlFor="editor-switch-rich-text" className="toggle-switch-label">
-        <span>{richTextName}</span>
+        <span>{t('visual_editor')}</span>
       </label>
     </span>
   )
@@ -181,7 +114,7 @@ const RichTextToggle: FC<{
   if (disabled) {
     return (
       <Tooltip
-        description={t('rich_text_is_only_available_for_tex_files')}
+        description={t('the_visual_editor_is_only_available_for_tex_files')}
         id="rich-text-toggle-tooltip"
         overlayProps={{ placement: 'bottom' }}
         tooltipProps={{ className: 'tooltip-wide' }}

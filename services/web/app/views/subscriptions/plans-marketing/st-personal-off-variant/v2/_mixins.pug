@@ -38,29 +38,30 @@ mixin plans_v2_table(period, config)
 				class=thClass
 				colspan=colspan
 			)
-				if (discountHighlighted)
-					p.plans-v2-table-discount-highlighted-text !{config.discountedColumn.text[period]}
-				if (highlighted)
-					p.plans-v2-table-green-highlighted-text !{config.highlightedColumn.text[period]}
-				case tableHeadKey
-					when 'individual_free'
-						+table_head_individual_free(highlighted, period)
-					when 'individual_collaborator'
-						+table_head_individual_collaborator(highlighted, eventTrackingKey, additionalEventSegmentation, period)
-					when 'individual_professional'
-						+table_head_individual_professional(highlighted, eventTrackingKey, additionalEventSegmentation, period)
-					when 'group_collaborator'
-						+table_head_group_collaborator(highlighted, eventTrackingKey, additionalEventSegmentation)
-					when 'group_professional'
-						+table_head_group_professional(highlighted, eventTrackingKey, additionalEventSegmentation)
-					when 'group_organization'
-						+table_head_group_organization(highlighted, eventTrackingKey, additionalEventSegmentation)
-					when 'student_free'
-						+table_head_student_free(highlighted, period)
-					when 'student_student'
-						+table_head_student_student(highlighted, eventTrackingKey, additionalEventSegmentation, period, tableHeadOptions.showExtraContent)
-					when 'student_university'
-						+table_head_student_university(highlighted, eventTrackingKey, additionalEventSegmentation, period)
+				.plans-v2-table-th
+					if (discountHighlighted)
+						p.plans-v2-table-discount-highlighted-text #{translate(config.discountedColumn.text[period]).toUpperCase()}
+					if (highlighted)
+						p.plans-v2-table-green-highlighted-text #{translate(config.highlightedColumn.text[period]).toUpperCase()}
+					case tableHeadKey
+						when 'individual_free'
+							+table_head_individual_free(highlighted, period)
+						when 'individual_collaborator'
+							+table_head_individual_collaborator(highlighted, eventTrackingKey, additionalEventSegmentation, period)
+						when 'individual_professional'
+							+table_head_individual_professional(highlighted, eventTrackingKey, additionalEventSegmentation, period)
+						when 'group_collaborator'
+							+table_head_group_collaborator(highlighted, eventTrackingKey, additionalEventSegmentation)
+						when 'group_professional'
+							+table_head_group_professional(highlighted, eventTrackingKey, additionalEventSegmentation)
+						when 'group_organization'
+							+table_head_group_organization(highlighted, eventTrackingKey, additionalEventSegmentation)
+						when 'student_free'
+							+table_head_student_free(highlighted, period)
+						when 'student_student'
+							+table_head_student_student(highlighted, eventTrackingKey, additionalEventSegmentation, period, tableHeadOptions.showExtraContent)
+						when 'student_university'
+							+table_head_student_university(highlighted, eventTrackingKey, additionalEventSegmentation, period)
 
 	for featuresPerSection in config.features
 		- var dividerColspan = Object.values(config.tableHead).reduce((prev, curr) => (prev) + (curr.colspan || 1), baseColspan)
@@ -193,7 +194,7 @@ mixin table_head_group_collaborator(highlighted, eventTrackingKey, additionalEve
 			p.plans-v2-table-price
 				span(data-ol-plans-v2-group-price-per-user='collaborator') #{initialLocalizedGroupPrice.pricePerUser.collaborator}
 			p.plans-v2-table-price-period-label
-				| per user / year
+				| #{translate('per_user_year')}
 		.plans-v2-table-btn-buy-container-mobile
 			+btn_buy_group_collaborator(highlighted, eventTrackingKey)
 			+additional_link_group(eventTrackingKey, additionalEventSegmentation, 'group_collaborator')
@@ -214,7 +215,7 @@ mixin table_head_group_professional(highlighted, eventTrackingKey, additionalEve
 			p.plans-v2-table-price
 				span(data-ol-plans-v2-group-price-per-user='professional') #{initialLocalizedGroupPrice.pricePerUser.professional}
 			p.plans-v2-table-price-period-label
-				| per user / year
+				| #{translate('per_user_year')}
 		.plans-v2-table-btn-buy-container-mobile
 			+btn_buy_group_professional(highlighted, eventTrackingKey)
 			+additional_link_group(eventTrackingKey, additionalEventSegmentation, 'group_professional')
@@ -308,29 +309,28 @@ mixin table_head_price(plan, period)
 			+gen_localized_price_for_plan_view(plan, period)
 		p.plans-v2-table-price-period-label
 			if period == 'annual'
-				| per year
+				| #{translate("per_year")}
 			else
-				| per month
+				| #{translate("per_month")}
 
 mixin table_cell(feature, plan)
 	- var planValue = feature.plans[plan]
 	- var featureName = feature.feature
 
-	.plans-v2-table-cell(
-		data-ol-plans-v2-table-cell-plan=plan
-		data-ol-plans-v2-table-cell-feature=featureName
-	)
-		if (feature.value === 'richText')
-			| !{planValue}
-		else if (feature.value === 'str')
-			| #{planValue}
-		else if (feature.value === 'bool')
-			if (planValue)
-				i.fa.fa-check(aria-hidden="true")
-				span.sr-only #{translate("feature_included")}
-			else
-				span(aria-hidden="true") -
-				span.sr-only #{translate("feature_not_included")}
+	.plans-v2-table-cell
+		.plans-v2-table-cell-content(
+			data-ol-plans-v2-table-cell-plan=plan
+			data-ol-plans-v2-table-cell-feature=featureName
+		)
+			if (feature.value === 'str')
+				| !{translate(planValue, {}, ['strong'])}
+			else if (feature.value === 'bool')
+				if (planValue)
+					i.fa.fa-check(aria-hidden="true")
+					span.sr-only #{translate("feature_included")}
+				else
+					span(aria-hidden="true") -
+					span.sr-only #{translate("feature_not_included")}
 
 mixin group_plans_license_picker()
 	form.plans-v2-license-picker-form(data-ol-plans-v2-license-picker-form)

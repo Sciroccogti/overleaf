@@ -19,10 +19,6 @@ describe('autocomplete', { scrollBehavior: false }, function () {
     cy.interceptSpelling()
   })
 
-  afterEach(function () {
-    window.metaAttributesCache = new Map()
-  })
-
   it('opens autocomplete on matched text', function () {
     const rootFolder: Folder[] = [
       {
@@ -177,7 +173,7 @@ describe('autocomplete', { scrollBehavior: false }, function () {
     cy.contains('\\includegraphics[width=0.3\\textwidth]{frog.jpg}')
 
     // start a new line and select an "includegraphics" command completion
-    cy.get('@line').type('{rightArrow}{Enter}')
+    cy.get('@line').type('{Enter}')
     activeEditorLine().type('\\includegr')
     cy.contains('\\includegraphics[]{}').click()
 
@@ -191,7 +187,7 @@ describe('autocomplete', { scrollBehavior: false }, function () {
     cy.contains('\\includegraphics[]{test-folder/example.png}')
 
     activeEditorLine()
-      .type(`${'{leftArrow}'.repeat('test-folder/example.png'.length)}fr`)
+      .type(`${'{leftArrow}'.repeat('test-folder/example.png}'.length)}fr`)
       .type('{ctrl+ }')
 
     cy.findAllByRole('listbox').should('have.length', 1)
@@ -492,7 +488,7 @@ describe('autocomplete', { scrollBehavior: false }, function () {
     cy.get('@line').contains('\\cite{ref-2}')
 
     // start typing another reference
-    cy.get('@line').type(', re')
+    cy.get('@line').type('{leftArrow}, re')
 
     // autocomplete open again
     cy.findAllByRole('listbox').contains('ref-3').click()
@@ -1031,37 +1027,37 @@ describe('autocomplete', { scrollBehavior: false }, function () {
     activeEditorLine().type('\\include{s', { delay: 100 })
     cy.findAllByRole('option').contains('sometext.txt').click()
     activeEditorLine().should('have.text', '\\include{sometext.txt}')
-    activeEditorLine().type('{rightArrow}{Enter}')
+    activeEditorLine().type('{Enter}')
 
     activeEditorLine().type('\\inclu', { delay: 100 })
     cy.contains('\\include{}').click()
     cy.contains('example.tex').click()
     activeEditorLine().should('have.text', '\\include{example}')
-    activeEditorLine().type('{rightArrow}{Enter}')
+    activeEditorLine().type('{Enter}')
 
     activeEditorLine().type('\\inclu', { delay: 100 })
     cy.findAllByRole('option').contains('\\include{}').click()
     cy.findAllByRole('option').contains('sometext.txt').click()
     activeEditorLine().should('have.text', '\\include{sometext.txt}')
-    activeEditorLine().type('{rightArrow}{Enter}')
+    activeEditorLine().type('{Enter}')
 
     activeEditorLine().click().as('line')
     activeEditorLine().type('\\input{e', { delay: 100 })
     cy.findAllByRole('option').contains('example.tex').click()
     activeEditorLine().should('have.text', '\\input{example}')
-    activeEditorLine().type('{rightArrow}{Enter}')
+    activeEditorLine().type('{Enter}')
 
     activeEditorLine().click().as('line')
     activeEditorLine().type('\\input{s', { delay: 100 })
     cy.findAllByRole('option').contains('sometext.txt').click()
     activeEditorLine().should('have.text', '\\input{sometext.txt}')
-    activeEditorLine().type('{rightArrow}{Enter}')
+    activeEditorLine().type('{Enter}')
 
     activeEditorLine().type('\\inpu', { delay: 100 })
     cy.findAllByRole('option').contains('\\input{}').click()
     cy.findAllByRole('option').contains('example.tex').click()
     activeEditorLine().should('have.text', '\\input{example}')
-    activeEditorLine().type('{rightArrow}{Enter}')
+    activeEditorLine().type('{Enter}')
 
     activeEditorLine().type('\\inpu', { delay: 100 })
     cy.findAllByRole('option').contains('\\input{}').click()

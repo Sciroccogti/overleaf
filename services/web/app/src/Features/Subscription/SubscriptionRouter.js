@@ -1,4 +1,5 @@
 const AuthenticationController = require('../Authentication/AuthenticationController')
+const PermissionsController = require('../Authorization/PermissionsController')
 const SubscriptionController = require('./SubscriptionController')
 const SubscriptionGroupController = require('./SubscriptionGroupController')
 const TeamInvitesController = require('./TeamInvitesController')
@@ -58,19 +59,20 @@ module.exports = {
     webRouter.delete(
       '/subscription/group/user',
       AuthenticationController.requireLogin(),
+      PermissionsController.requirePermission('leave-group-subscription'),
       SubscriptionGroupController.removeSelfFromGroup
     )
 
     // Team invites
     webRouter.get(
       '/subscription/invites/:token/',
-      AuthenticationController.requireLogin(),
       TeamInvitesController.viewInvite
     )
     webRouter.put(
       '/subscription/invites/:token/',
       AuthenticationController.requireLogin(),
       RateLimiterMiddleware.rateLimit(teamInviteRateLimiter),
+      PermissionsController.requirePermission('join-subscription'),
       TeamInvitesController.acceptInvite
     )
 
@@ -88,6 +90,7 @@ module.exports = {
     webRouter.post(
       '/user/subscription/create',
       AuthenticationController.requireLogin(),
+      PermissionsController.requirePermission('start-subscription'),
       SubscriptionController.createSubscription
     )
     webRouter.post(

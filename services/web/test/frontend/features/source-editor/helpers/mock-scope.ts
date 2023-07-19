@@ -1,5 +1,7 @@
 import { docId, mockDoc } from './mock-doc'
 import { Folder } from '../../../../../types/folder'
+import { sleep } from '../../../helpers/sleep'
+
 export const rootFolderId = '012345678901234567890123'
 export const figuresFolderId = '123456789012345678901234'
 export const figureId = '234567890123456789012345'
@@ -55,6 +57,7 @@ export const mockScope = (content?: string) => {
       open_doc_name: 'test.tex',
       open_doc_id: docId,
       showVisual: false,
+      wantTrackChanges: false,
     },
     pdf: {
       logEntryAnnotations: {},
@@ -64,7 +67,27 @@ export const mockScope = (content?: string) => {
       name: 'Test Project',
       spellCheckLanguage: 'en',
       rootFolder: [] as Folder[],
+      features: {
+        trackChanges: true,
+      },
     },
+    permissions: {
+      comment: true,
+      write: true,
+    },
+    reviewPanel: {
+      subView: 'cur_file',
+      formattedProjectMembers: {},
+      fullTCStateCollapsed: true,
+      entries: {},
+      resolvedComments: {},
+    },
+    ui: {
+      reviewPanelOpen: true,
+    },
+    toggleReviewPanel: cy.stub(),
+    toggleTrackChangesForEveryone: cy.stub(),
+    refreshResolvedCommentsDropdown: cy.stub(() => sleep(1000)),
     onlineUserCursorHighlights: {},
     permissionsLevel: 'owner',
     $on: cy.stub(),

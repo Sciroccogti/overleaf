@@ -39,6 +39,25 @@ function LinkingSection() {
 
   const hasIntegrationLinkingSection = allIntegrationLinkingWidgets.length
   const hasReferencesLinkingSection = referenceLinkingWidgets.length
+
+  // Filter out SSO providers that are not allowed to be linked by
+  // managed users. Allow unlinking them if they are already linked.
+  const hideGoogleSSO = getMeta('ol-cannot-link-google-sso')
+  const hideOtherThirdPartySSO = getMeta('ol-cannot-link-other-third-party-sso')
+
+  for (const providerId in subscriptions) {
+    const isLinked = subscriptions[providerId].linked
+    if (providerId === 'google') {
+      if (hideGoogleSSO && !isLinked) {
+        delete subscriptions[providerId]
+      }
+    } else {
+      if (hideOtherThirdPartySSO && !isLinked) {
+        delete subscriptions[providerId]
+      }
+    }
+  }
+
   const hasSSOLinkingSection = Object.keys(subscriptions).length > 0
 
   if (
@@ -160,10 +179,14 @@ function SSOLinkingWidgetContainer({
       description = t('linked_collabratec_description')
       break
     case 'google':
-    case 'twitter':
       description = `${t('login_with_service', {
         service: subscription.provider.name,
       })}.`
+      break
+    case 'twitter':
+      description = t('login_with_service_will_stop_working_soon', {
+        service: subscription.provider.name,
+      })
       break
     case 'orcid':
       description = t('oauth_orcid_description')

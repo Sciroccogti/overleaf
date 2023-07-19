@@ -5,7 +5,11 @@ import { placeSelectionInsideBlock } from '../selection'
 export class MathWidget extends WidgetType {
   destroyed = false
 
-  constructor(public math: string, public displayMode: boolean) {
+  constructor(
+    public math: string,
+    public displayMode: boolean,
+    public preamble?: string
+  ) {
     super()
   }
 
@@ -26,14 +30,19 @@ export class MathWidget extends WidgetType {
   }
 
   eq(widget: MathWidget) {
-    return widget.math === this.math && widget.displayMode === this.displayMode
+    return (
+      widget.math === this.math &&
+      widget.displayMode === this.displayMode &&
+      widget.preamble === this.preamble
+    )
   }
 
-  updateDOM(element: HTMLElement) {
+  updateDOM(element: HTMLElement, view: EditorView) {
     this.destroyed = false
     this.renderMath(element).catch(() => {
       element.classList.add('ol-cm-math-error')
     })
+    view.requestMeasure()
     return true
   }
 
@@ -61,6 +70,13 @@ export class MathWidget extends WidgetType {
 
     if (!this.destroyed) {
       MathJax.texReset([0]) // equation numbering is disabled, but this is still needed
+      if (this.preamble) {
+        try {
+          await MathJax.tex2svgPromise(this.preamble)
+        } catch {
+          // ignore errors thrown during parsing command definitions
+        }
+      }
       const math = await MathJax.tex2svgPromise(this.math, {
         ...MathJax.getMetricsFor(element),
         display: this.displayMode,

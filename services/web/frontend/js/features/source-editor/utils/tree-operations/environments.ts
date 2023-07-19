@@ -8,7 +8,7 @@ import { FigureData } from '../../extensions/figure-modal'
 const HUNDRED_MS = 100
 
 export class EnvironmentName extends ProjectionItem {
-  title = ''
+  readonly title: string = ''
 }
 
 export const enterNode = (
@@ -236,6 +236,11 @@ export function getEnvironmentName(
   return state.sliceDoc(nameNode.from, nameNode.to)
 }
 
+export const getUnstarredEnvironmentName = (
+  node: SyntaxNode | null,
+  state: EditorState
+): string | undefined => getEnvironmentName(node, state)?.replace(/\*$/, '')
+
 export function getEnvironmentArguments(environmentNode: SyntaxNode) {
   return environmentNode.getChild('BeginEnv')?.getChildren('TextArgument')
 }
@@ -351,4 +356,12 @@ export function parseFigureData(
     graphicsCommand,
     graphicsCommandArguments,
   })
+}
+
+export const getBeginEnvSuffix = (state: EditorState, node: SyntaxNode) => {
+  const argumentNode = node
+    .getChild('OptionalArgument')
+    ?.getChild('ShortOptionalArg')
+
+  return argumentNode && state.sliceDoc(argumentNode.from, argumentNode.to)
 }

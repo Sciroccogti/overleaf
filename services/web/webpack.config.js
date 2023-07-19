@@ -216,12 +216,6 @@ module.exports = {
 
       // Enables ace/ace shortcut
       ace: 'ace-builds/src-noconflict',
-      // fineupload vendored dependency (which we're aliasing to fineuploadER
-      // for some reason)
-      fineuploader: path.join(
-        __dirname,
-        `frontend/js/vendor/libs/${PackageVersions.lib('fineuploader')}`
-      ),
     },
     // symlinks: false, // enable this while using `npm link`
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
@@ -310,11 +304,6 @@ module.exports = {
           from: 'fonts/HTML-CSS/TeX/woff/*',
           to: 'js/libs/mathjax',
           context: mathjaxDir,
-        },
-        {
-          from: 'libs/sigma-master',
-          to: 'js/libs/sigma-master',
-          context: vendorDir,
         },
         {
           from: 'src-min-noconflict',

@@ -6,11 +6,14 @@ import {
 } from '@codemirror/view'
 import { EditorState, Range } from '@codemirror/state'
 import { syntaxTree } from '@codemirror/language'
-import { getEnvironmentName } from '../../utils/tree-operations/environments'
+import { getUnstarredEnvironmentName } from '../../utils/tree-operations/environments'
 import { centeringNodeForEnvironment } from '../../utils/tree-operations/figure'
+import { parseTheoremStyles } from '../../utils/tree-operations/theorems'
 import { Tree } from '@lezer/common'
+import { parseColorArguments } from '../../utils/tree-operations/colors'
 
 /**
+ * A view plugin that decorates ranges of text with Mark decorations.
  * Mark decorations add attributes to elements within a range.
  */
 export const markDecorations = ViewPlugin.define(
@@ -20,6 +23,8 @@ export const markDecorations = ViewPlugin.define(
       tree: Tree
     ): DecorationSet => {
       const decorations: Range<Decoration>[] = []
+
+      const theoremStyles = parseTheoremStyles(state, tree)
 
       for (const { from, to } of view.visibleRanges) {
         tree?.iterate({
@@ -101,47 +106,168 @@ export const markDecorations = ViewPlugin.define(
                   )
                 }
               }
+            } else if (nodeRef.type.is('TextColorCommand')) {
+              const result = parseColorArguments(state, nodeRef.node)
+
+              if (result) {
+                const { color, from, to } = result
+
+                // decorate the content
+                decorations.push(
+                  Decoration.mark({
+                    class: 'ol-cm-textcolor',
+                    inclusive: true,
+                    attributes: {
+                      style: `color: ${color}`,
+                    },
+                  }).range(from, to)
+                )
+              }
+            } else if (nodeRef.type.is('ColorBoxCommand')) {
+              const result = parseColorArguments(state, nodeRef.node)
+
+              if (result) {
+                const { color, from, to } = result
+
+                // decorate the content
+                decorations.push(
+                  Decoration.mark({
+                    class: 'ol-cm-colorbox',
+                    inclusive: true,
+                    attributes: {
+                      style: `background-color: ${color}`,
+                    },
+                  }).range(from, to)
+                )
+              }
             } else if (nodeRef.type.is('$Environment')) {
-              const environmentName = getEnvironmentName(nodeRef.node, state)
+              const environmentName = getUnstarredEnvironmentName(
+                nodeRef.node,
+                state
+              )
 
-              switch (environmentName) {
-                case 'abstract':
-                case 'figure':
-                case 'table':
-                  {
-                    const centered = Boolean(
-                      centeringNodeForEnvironment(nodeRef)
-                    )
+              if (environmentName) {
+                switch (environmentName) {
+                  case 'abstract':
+                  case 'figure':
+                  case 'table':
+                  case 'verbatim':
+                  case 'lstlisting':
+                    {
+                      const centered = Boolean(
+                        centeringNodeForEnvironment(nodeRef)
+                      )
 
-                    const lines = {
-                      start: state.doc.lineAt(nodeRef.from),
-                      end: state.doc.lineAt(nodeRef.to),
-                    }
-
-                    for (
-                      let lineNumber = lines.start.number;
-                      lineNumber <= lines.end.number;
-                      lineNumber++
-                    ) {
-                      const line = state.doc.line(lineNumber)
-
-                      const classNames = [
-                        `ol-cm-environment-${environmentName}`,
-                        'ol-cm-environment-line',
-                      ]
-
-                      if (centered) {
-                        classNames.push('ol-cm-environment-centered')
+                      const lines = {
+                        start: state.doc.lineAt(nodeRef.from),
+                        end: state.doc.lineAt(nodeRef.to),
                       }
 
-                      decorations.push(
-                        Decoration.line({
-                          class: classNames.join(' '),
-                        }).range(line.from)
-                      )
+                      for (
+                        let lineNumber = lines.start.number;
+                        lineNumber <= lines.end.number;
+                        lineNumber++
+                      ) {
+                        const line = state.doc.line(lineNumber)
+
+                        const classNames = [
+                          `ol-cm-environment-${environmentName}`,
+                          'ol-cm-environment-line',
+                        ]
+
+                        if (centered) {
+                          classNames.push('ol-cm-environment-centered')
+                        }
+
+                        decorations.push(
+                          Decoration.line({
+                            class: classNames.join(' '),
+                          }).range(line.from)
+                        )
+                      }
                     }
-                  }
-                  break
+                    break
+
+                  case 'quote':
+                  case 'quotation':
+                  case 'quoting':
+                  case 'displayquote':
+                    {
+                      const lines = {
+                        start: state.doc.lineAt(nodeRef.from),
+                        end: state.doc.lineAt(nodeRef.to),
+                      }
+
+                      for (
+                        let lineNumber = lines.start.number;
+                        lineNumber <= lines.end.number;
+                        lineNumber++
+                      ) {
+                        const line = state.doc.line(lineNumber)
+
+                        const classNames = [
+                          `ol-cm-environment-${environmentName}`,
+                          'ol-cm-environment-quote-block',
+                          'ol-cm-environment-line',
+                        ]
+
+                        decorations.push(
+                          Decoration.line({
+                            class: classNames.join(' '),
+                          }).range(line.from)
+                        )
+                      }
+                    }
+                    break
+
+                  default:
+                    if (theoremStyles.has(environmentName)) {
+                      const theoremStyle = theoremStyles.get(environmentName)
+
+                      if (theoremStyle) {
+                        const lines = {
+                          start: state.doc.lineAt(nodeRef.from),
+                          end: state.doc.lineAt(nodeRef.to),
+                        }
+
+                        decorations.push(
+                          Decoration.line({
+                            class: [
+                              `ol-cm-environment-theorem-${theoremStyle}`,
+                              'ol-cm-environment-first-line',
+                            ].join(' '),
+                          }).range(lines.start.from)
+                        )
+
+                        for (
+                          let lineNumber = lines.start.number + 1;
+                          lineNumber <= lines.end.number - 1;
+                          lineNumber++
+                        ) {
+                          const line = state.doc.line(lineNumber)
+
+                          decorations.push(
+                            Decoration.line({
+                              class: [
+                                `ol-cm-environment-theorem-${theoremStyle}`,
+                                'ol-cm-environment-line',
+                              ].join(' '),
+                            }).range(line.from)
+                          )
+                        }
+
+                        decorations.push(
+                          Decoration.line({
+                            class: [
+                              `ol-cm-environment-theorem-${theoremStyle}`,
+                              'ol-cm-environment-last-line',
+                            ].join(' '),
+                          }).range(lines.start.from)
+                        )
+                      }
+                    }
+                    break
+                }
               }
             }
           },

@@ -1,5 +1,7 @@
 import { Trans, useTranslation } from 'react-i18next'
+import getMeta from '../../../../utils/meta'
 import { useSubscriptionDashboardContext } from '../../context/subscription-dashboard-context'
+import { RowLink } from './row-link'
 
 export default function ManagedGroupSubscriptions() {
   const { t } = useTranslation()
@@ -8,6 +10,8 @@ export default function ManagedGroupSubscriptions() {
   if (!managedGroupSubscriptions) {
     return null
   }
+
+  const groupSettingsEnabledFor = getMeta('ol-groupSettingsEnabledFor', [])
 
   return (
     <>
@@ -36,24 +40,32 @@ export default function ManagedGroupSubscriptions() {
               />
             )}
           </p>
-          <p>
-            <a
-              className="btn btn-primary"
-              href={`/manage/groups/${subscription._id}/members`}
-            >
-              <i className="fa fa-fw fa-users" /> {t('manage_members')}
-            </a>
-          </p>
-          <p>
-            <a href={`/manage/groups/${subscription._id}/managers`}>
-              <i className="fa fa-fw fa-users" /> {t('manage_group_managers')}
-            </a>
-          </p>
-          <p>
-            <a href={`/metrics/groups/${subscription._id}`}>
-              <i className="fa fa-fw fa-line-chart" /> {t('view_metrics')}
-            </a>
-          </p>
+          <RowLink
+            href={`/manage/groups/${subscription._id}/members`}
+            heading={t('manage_members')}
+            subtext={t('manage_group_members_subtext')}
+            icon="groups"
+          />
+          <RowLink
+            href={`/manage/groups/${subscription._id}/managers`}
+            heading={t('manage_group_managers')}
+            subtext={t('manage_managers_subtext')}
+            icon="manage_accounts"
+          />
+          {groupSettingsEnabledFor.includes(subscription._id) && (
+            <RowLink
+              href={`/manage/groups/${subscription._id}/settings`}
+              heading={t('manage_group_settings')}
+              subtext={t('manage_group_settings_subtext')}
+              icon="settings"
+            />
+          )}
+          <RowLink
+            href={`/metrics/groups/${subscription._id}`}
+            heading={t('view_metrics')}
+            subtext={t('view_metrics_group_subtext')}
+            icon="insights"
+          />
           <hr />
         </div>
       ))}
