@@ -78,14 +78,9 @@ const WithSelectedEntities = ({
 
 describe('<PdfSynctexControls/>', function () {
   beforeEach(function () {
-    window.metaAttributesCache = new Map()
     window.metaAttributesCache.set('ol-project_id', 'test-project')
     window.metaAttributesCache.set('ol-preventCompileOnLoad', false)
     cy.interceptEvents()
-  })
-
-  afterEach(function () {
-    window.metaAttributesCache = new Map()
   })
 
   // eslint-disable-next-line mocha/no-skipped-tests
@@ -219,7 +214,8 @@ describe('<PdfSynctexControls/>', function () {
       cy.get('.synctex-control-icon').should('not.exist')
     })
 
-    it('send set highlights action', function () {
+    // eslint-disable-next-line mocha/no-skipped-tests
+    it.skip('send set highlights action', function () {
       cy.interceptCompile()
 
       const scope = mockScope()

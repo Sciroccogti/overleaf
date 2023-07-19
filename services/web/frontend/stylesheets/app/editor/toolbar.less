@@ -299,6 +299,7 @@
 .editor-toggle-switch {
   display: flex;
   align-items: center;
+  white-space: nowrap;
 
   .toggle-switch {
     margin-left: 5px;
@@ -316,6 +317,10 @@
   .toggle-switch-label:last-of-type span {
     padding-right: 8px;
     border-right: none;
+  }
+
+  .badge {
+    margin-right: 5px;
   }
 }
 
@@ -432,4 +437,19 @@
   height: @toolbar-btn-height;
   padding-bottom: 0px;
   margin-bottom: 0.5px;
+}
+
+.switch-to-editor-btn {
+  margin-right: 7px;
+}
+
+.switch-to-editor-btn,
+.switch-to-pdf-btn {
+  text-align: left;
+  display: flex;
+  align-items: center;
+
+  .toolbar-btn-secondary-icon {
+    margin-right: 5px;
+  }
 }

@@ -186,9 +186,6 @@ module.exports = {
       url: `http://${process.env.SPELLING_HOST || 'localhost'}:3005`,
       host: process.env.SPELLING_HOST,
     },
-    trackchanges: {
-      url: `http://${process.env.TRACK_CHANGES_HOST || 'localhost'}:3015`,
-    },
     docstore: {
       url: `http://${process.env.DOCSTORE_HOST || 'localhost'}:3016`,
       pubUrl: `http://${process.env.DOCSTORE_HOST || 'localhost'}:3016`,
@@ -207,8 +204,6 @@ module.exports = {
     },
     project_history: {
       sendProjectStructureOps: true,
-      initializeHistoryForNewProjects: true,
-      displayHistoryForNewProjects: true,
       url: `http://${process.env.PROJECT_HISTORY_HOST || 'localhost'}:3054`,
     },
     realTime: {
@@ -222,6 +217,10 @@ module.exports = {
     },
     webpack: {
       url: `http://${process.env.WEBPACK_HOST || 'localhost'}:3808`,
+    },
+    wiki: {
+      url: process.env.WIKI_URL || 'https://learn.sharelatex.com',
+      maxCacheAge: parseInt(process.env.WIKI_MAX_CACHE_AGE || 5 * minutes, 10),
     },
 
     haveIBeenPwned: {
@@ -669,6 +668,7 @@ module.exports = {
       login: true,
       passwordReset: true,
       register: true,
+      addEmail: true,
     },
   },
 
@@ -701,7 +701,7 @@ module.exports = {
     process.env.FILE_IGNORE_PATTERN ||
     '**/{{__MACOSX,.git,.texpadtmp,.R}{,/**},.!(latexmkrc),*.{dvi,aux,log,toc,out,pdfsync,synctex,synctex(busy),fdb_latexmk,fls,nlo,ind,glo,gls,glg,bbl,blg,doc,docx,gz,swp}}',
 
-  validRootDocExtensions: ['tex', 'Rtex', 'ltx'],
+  validRootDocExtensions: ['tex', 'Rtex', 'ltx', 'Rnw'],
 
   emailConfirmationDisabled:
     process.env.EMAIL_CONFIRMATION_DISABLED === 'true' || false,
@@ -830,21 +830,18 @@ module.exports = {
     editorLeftMenuSync: [],
     editorLeftMenuManageTemplate: [],
     oauth2Server: [],
+    managedGroupSubscriptionEnrollmentNotification: [],
+    managedGroupEnrollmentInvite: [],
   },
 
-  moduleImportSequence: [
-    'launchpad',
-    'server-ce-scripts',
-    'user-activate',
-    'history-migration',
-  ],
+  moduleImportSequence: ['launchpad', 'server-ce-scripts', 'user-activate'],
 
   csp: {
     enabled: process.env.CSP_ENABLED === 'true',
     reportOnly: process.env.CSP_REPORT_ONLY === 'true',
     reportPercentage: parseFloat(process.env.CSP_REPORT_PERCENTAGE) || 0,
     reportUri: process.env.CSP_REPORT_URI,
-    exclude: ['app/views/project/editor', 'app/views/project/list-react'],
+    exclude: ['app/views/project/editor'],
   },
 
   unsupportedBrowsers: {
@@ -853,6 +850,10 @@ module.exports = {
 
   // ID of the IEEE brand in the rails app
   ieeeBrandId: intFromEnv('IEEE_BRAND_ID', 15),
+
+  managedUsers: {
+    enabled: false,
+  },
 }
 
 module.exports.mergeWith = function (overrides) {

@@ -24,6 +24,7 @@ const { expressify } = require('../../util/promises')
 const OError = require('@overleaf/o-error')
 const SplitTestHandler = require('../SplitTests/SplitTestHandler')
 const SubscriptionHelper = require('./SubscriptionHelper')
+const ManagedUsersManager = require('../../../../modules/managed-users/app/src/ManagedUsersManager')
 
 const groupPlanModalOptions = Settings.groupPlanModalOptions
 const validGroupPlanModalOptions = {
@@ -57,8 +58,12 @@ async function plansPage(req, res) {
   if (GeoIpLookup.isValidCurrencyParam(queryCurrency)) {
     currency = queryCurrency
   }
-  const { recommendedCurrency, countryCode, geoPricingTestVariant } =
-    await _getRecommendedCurrency(req, res)
+  const {
+    recommendedCurrency,
+    countryCode,
+    geoPricingINRTestVariant,
+    geoPricingLATAMTestVariant,
+  } = await _getRecommendedCurrency(req, res)
   if (recommendedCurrency && currency == null) {
     currency = recommendedCurrency
   }
@@ -103,13 +108,53 @@ async function plansPage(req, res) {
     removePersonalPlanAssingment
   )
 
-  AnalyticsManager.recordEventForSession(req.session, 'plans-page-view', {
+  let showInrGeoBanner, inrGeoBannerSplitTestName
+  let inrGeoBannerVariant = 'default'
+  if (countryCode === 'IN') {
+    inrGeoBannerSplitTestName =
+      geoPricingINRTestVariant === 'inr'
+        ? 'geo-banners-inr-2'
+        : 'geo-banners-inr-1'
+    try {
+      const geoBannerAssignment = await SplitTestHandler.promises.getAssignment(
+        req,
+        res,
+        inrGeoBannerSplitTestName
+      )
+      inrGeoBannerVariant = geoBannerAssignment.variant
+      if (inrGeoBannerVariant !== 'default') {
+        showInrGeoBanner = true
+      }
+    } catch (error) {
+      logger.error(
+        { err: error },
+        `Failed to get INR geo banner lookup or assignment (${inrGeoBannerSplitTestName})`
+      )
+    }
+  }
+
+  const plansPageViewSegmentation = {
     currency: recommendedCurrency,
     'remove-personal-plan-page': removePersonalPlanAssingment?.variant,
     countryCode,
-    'geo-pricing-inr-group': geoPricingTestVariant,
+    'geo-pricing-inr-group': geoPricingINRTestVariant,
     'geo-pricing-inr-page': currency === 'INR' ? 'inr' : 'default',
-  })
+    'geo-pricing-latam-group': geoPricingLATAMTestVariant,
+    'geo-pricing-latam-page': ['BRL', 'MXN', 'COP', 'CLP', 'PEN'].includes(
+      currency
+    )
+      ? 'latam'
+      : 'default',
+  }
+  if (inrGeoBannerSplitTestName) {
+    plansPageViewSegmentation[inrGeoBannerSplitTestName] = inrGeoBannerVariant
+  }
+
+  AnalyticsManager.recordEventForSession(
+    req.session,
+    'plans-page-view',
+    plansPageViewSegmentation
+  )
 
   res.render(`subscriptions/plans-marketing/${directory}/plans-marketing-v2`, {
     title: 'plans_and_pricing',
@@ -126,29 +171,8 @@ async function plansPage(req, res) {
     groupPlanModalDefaults,
     initialLocalizedGroupPrice:
       SubscriptionHelper.generateInitialLocalizedGroupPrice(currency),
+    showInrGeoBanner,
   })
-}
-
-async function paymentPage(req, res) {
-  try {
-    const assignment = await SplitTestHandler.promises.getAssignment(
-      req,
-      res,
-      'subscription-pages-react'
-    )
-    // get to show the recurly.js page
-    if (assignment.variant === 'active') {
-      await _paymentReactPage(req, res)
-    } else {
-      await _paymentAngularPage(req, res)
-    }
-  } catch (error) {
-    logger.warn(
-      { err: error },
-      'failed to get "subscription-pages-react" split test assignment'
-    )
-    await _paymentAngularPage(req, res)
-  }
 }
 
 /**
@@ -156,7 +180,7 @@ async function paymentPage(req, res) {
  * @param {import("express").Response} res
  * @returns {Promise<void>}
  */
-async function _paymentReactPage(req, res) {
+async function paymentPage(req, res) {
   const user = SessionManager.getSessionUser(req.session)
   const plan = PlansLocator.findLocalPlanInSettings(req.query.planCode)
   if (!plan) {
@@ -189,12 +213,6 @@ async function _paymentReactPage(req, res) {
         currency = recommendedCurrency
       }
 
-      await SplitTestHandler.promises.getAssignment(
-        req,
-        res,
-        'student-check-modal'
-      )
-
       res.render('subscriptions/new-react', {
         title: 'subscribe',
         currency,
@@ -208,82 +226,6 @@ async function _paymentReactPage(req, res) {
         itm_referrer: req.query.itm_referrer,
       })
     }
-  }
-}
-
-async function _paymentAngularPage(req, res) {
-  const user = SessionManager.getSessionUser(req.session)
-  const plan = PlansLocator.findLocalPlanInSettings(req.query.planCode)
-  if (!plan) {
-    return HttpErrorHandler.unprocessableEntity(req, res, 'Plan not found')
-  }
-  const hasSubscription =
-    await LimitationsManager.promises.userHasV1OrV2Subscription(user)
-  if (hasSubscription) {
-    res.redirect('/user/subscription?hasSubscription=true')
-  } else {
-    // LimitationsManager.userHasV2Subscription only checks Mongo. Double check with
-    // Recurly as well at this point (we don't do this most places for speed).
-    const valid =
-      await SubscriptionHandler.promises.validateNoSubscriptionInRecurly(
-        user._id
-      )
-    if (!valid) {
-      res.redirect('/user/subscription?hasSubscription=true')
-    } else {
-      let currency = null
-      if (req.query.currency) {
-        const queryCurrency = req.query.currency.toUpperCase()
-        if (GeoIpLookup.isValidCurrencyParam(queryCurrency)) {
-          currency = queryCurrency
-        }
-      }
-      const { currencyCode: recommendedCurrency, countryCode } =
-        await GeoIpLookup.promises.getCurrencyCode(req.query?.ip || req.ip)
-      if (recommendedCurrency && currency == null) {
-        currency = recommendedCurrency
-      }
-
-      await SplitTestHandler.promises.getAssignment(
-        req,
-        res,
-        'student-check-modal'
-      )
-
-      res.render('subscriptions/new-refreshed', {
-        title: 'subscribe',
-        currency,
-        countryCode,
-        plan,
-        recurlyConfig: JSON.stringify({
-          currency,
-          subdomain: Settings.apis.recurly.subdomain,
-        }),
-        showCouponField: !!req.query.scf,
-        showVatField: !!req.query.svf,
-      })
-    }
-  }
-}
-
-async function userSubscriptionPage(req, res) {
-  try {
-    const assignment = await SplitTestHandler.promises.getAssignment(
-      req,
-      res,
-      'subscription-pages-react'
-    )
-    if (assignment.variant === 'active') {
-      await _userSubscriptionReactPage(req, res)
-    } else {
-      await _userSubscriptionAngularPage(req, res)
-    }
-  } catch (error) {
-    logger.warn(
-      { err: error },
-      'failed to get "subscription-pages-react" split test assignment'
-    )
-    await _userSubscriptionAngularPage(req, res)
   }
 }
 
@@ -301,7 +243,7 @@ function formatGroupPlansDataForDash() {
  * @param {import("express").Response} res
  * @returns {Promise<void>}
  */
-async function _userSubscriptionReactPage(req, res) {
+async function userSubscriptionPage(req, res) {
   const user = SessionManager.getSessionUser(req.session)
   const results =
     await SubscriptionViewModelBuilder.promises.buildUsersSubscriptionViewModel(
@@ -314,7 +256,6 @@ async function _userSubscriptionReactPage(req, res) {
     currentInstitutionsWithLicence,
     managedInstitutions,
     managedPublishers,
-    v1SubscriptionStatus,
   } = results
   const hasSubscription =
     await LimitationsManager.promises.userHasV1OrV2Subscription(user)
@@ -336,6 +277,10 @@ async function _userSubscriptionReactPage(req, res) {
 
   const groupPlansDataForDash = formatGroupPlansDataForDash()
 
+  const groupSettingsEnabledFor = (managedGroupSubscriptions || [])
+    .map(sub => sub._id.toString())
+    .filter(id => ManagedUsersManager.hasManagedUsersFeature(id))
+
   const data = {
     title: 'your_subscription',
     plans: plansData?.plans,
@@ -348,70 +293,22 @@ async function _userSubscriptionReactPage(req, res) {
     managedGroupSubscriptions,
     managedInstitutions,
     managedPublishers,
-    v1SubscriptionStatus,
     currentInstitutionsWithLicence,
     cancelButtonNewCopy,
     groupPlans: groupPlansDataForDash,
+    groupSettingsEnabledFor,
   }
   res.render('subscriptions/dashboard-react', data)
 }
 
-async function _userSubscriptionAngularPage(req, res) {
-  const user = SessionManager.getSessionUser(req.session)
-  const results =
-    await SubscriptionViewModelBuilder.promises.buildUsersSubscriptionViewModel(
-      user
-    )
-  const {
-    personalSubscription,
-    memberGroupSubscriptions,
-    managedGroupSubscriptions,
-    currentInstitutionsWithLicence,
-    managedInstitutions,
-    managedPublishers,
-    v1SubscriptionStatus,
-  } = results
-  const hasSubscription =
-    await LimitationsManager.promises.userHasV1OrV2Subscription(user)
-  const fromPlansPage = req.query.hasSubscription
-  const plans = SubscriptionViewModelBuilder.buildPlansList(
-    personalSubscription ? personalSubscription.plan : undefined
-  )
-
-  AnalyticsManager.recordEventForSession(req.session, 'subscription-page-view')
-
-  const cancelButtonAssignment = await SplitTestHandler.promises.getAssignment(
-    req,
-    res,
-    'subscription-cancel-button'
-  )
-
-  const cancelButtonNewCopy = cancelButtonAssignment?.variant === 'new-copy'
-
-  const data = {
-    title: 'your_subscription',
-    plans,
-    groupPlans: GroupPlansData,
-    user,
-    hasSubscription,
-    fromPlansPage,
-    personalSubscription,
-    memberGroupSubscriptions,
-    managedGroupSubscriptions,
-    managedInstitutions,
-    managedPublishers,
-    v1SubscriptionStatus,
-    currentInstitutionsWithLicence,
-    groupPlanModalOptions,
-    cancelButtonNewCopy,
-  }
-  res.render('subscriptions/dashboard', data)
-}
-
 async function interstitialPaymentPage(req, res) {
   const user = SessionManager.getSessionUser(req.session)
-  const { recommendedCurrency, countryCode, geoPricingTestVariant } =
-    await _getRecommendedCurrency(req, res)
+  const {
+    recommendedCurrency,
+    countryCode,
+    geoPricingINRTestVariant,
+    geoPricingLATAMTestVariant,
+  } = await _getRecommendedCurrency(req, res)
 
   const hasSubscription =
     await LimitationsManager.promises.userHasV1OrV2Subscription(user)
@@ -440,17 +337,52 @@ async function interstitialPaymentPage(req, res) {
   if (hasSubscription) {
     res.redirect('/user/subscription?hasSubscription=true')
   } else {
+    let showInrGeoBanner, inrGeoBannerSplitTestName
+    let inrGeoBannerVariant = 'default'
+    if (countryCode === 'IN') {
+      inrGeoBannerSplitTestName =
+        geoPricingINRTestVariant === 'inr'
+          ? 'geo-banners-inr-2'
+          : 'geo-banners-inr-1'
+      try {
+        const geoBannerAssignment =
+          await SplitTestHandler.promises.getAssignment(
+            req,
+            res,
+            inrGeoBannerSplitTestName
+          )
+        inrGeoBannerVariant = geoBannerAssignment.variant
+        if (inrGeoBannerVariant !== 'default') {
+          showInrGeoBanner = true
+        }
+      } catch (error) {
+        logger.error(
+          { err: error },
+          `Failed to get INR geo banner lookup or assignment (${inrGeoBannerSplitTestName})`
+        )
+      }
+    }
+    const paywallPlansPageViewSegmentation = {
+      currency: recommendedCurrency,
+      countryCode,
+      'geo-pricing-inr-group': geoPricingINRTestVariant,
+      'geo-pricing-inr-page': recommendedCurrency === 'INR' ? 'inr' : 'default',
+      'geo-pricing-latam-group': geoPricingLATAMTestVariant,
+      'geo-pricing-latam-page': ['BRL', 'MXN', 'COP', 'CLP', 'PEN'].includes(
+        recommendedCurrency
+      )
+        ? 'latam'
+        : 'default',
+      'remove-personal-plan-page': removePersonalPlanAssingment?.variant,
+    }
+    if (inrGeoBannerSplitTestName) {
+      paywallPlansPageViewSegmentation[inrGeoBannerSplitTestName] =
+        inrGeoBannerVariant
+    }
     AnalyticsManager.recordEventForSession(
       req.session,
       'paywall-plans-page-view',
-      {
-        currency: recommendedCurrency,
-        countryCode,
-        'geo-pricing-inr-group': geoPricingTestVariant,
-        'geo-pricing-inr-page':
-          recommendedCurrency === 'INR' ? 'inr' : 'default',
-        'remove-personal-plan-page': removePersonalPlanAssingment?.variant,
-      }
+      paywallPlansPageViewSegmentation
     )
 
     res.render(
@@ -463,6 +395,7 @@ async function interstitialPaymentPage(req, res) {
         recommendedCurrency,
         interstitialPaymentConfig,
         showSkipLink,
+        showInrGeoBanner,
       }
     )
   }
@@ -515,33 +448,12 @@ async function createSubscription(req, res) {
   }
 }
 
-async function successfulSubscription(req, res) {
-  try {
-    const assignment = await SplitTestHandler.promises.getAssignment(
-      req,
-      res,
-      'subscription-pages-react'
-    )
-    if (assignment.variant === 'active') {
-      await _successfulSubscriptionReact(req, res)
-    } else {
-      await _successfulSubscriptionAngular(req, res)
-    }
-  } catch (error) {
-    logger.warn(
-      { err: error },
-      'failed to get "subscription-pages-react" split test assignment'
-    )
-    await _successfulSubscriptionAngular(req, res)
-  }
-}
-
 /**
  * @param {import("express").Request} req
  * @param {import("express").Response} res
  * @returns {Promise<void>}
  */
-async function _successfulSubscriptionReact(req, res) {
+async function successfulSubscription(req, res) {
   const user = SessionManager.getSessionUser(req.session)
   const { personalSubscription } =
     await SubscriptionViewModelBuilder.promises.buildUsersSubscriptionViewModel(
@@ -554,26 +466,6 @@ async function _successfulSubscriptionReact(req, res) {
     res.redirect('/user/subscription/plans')
   } else {
     res.render('subscriptions/successful-subscription-react', {
-      title: 'thank_you',
-      personalSubscription,
-      postCheckoutRedirect,
-    })
-  }
-}
-
-async function _successfulSubscriptionAngular(req, res) {
-  const user = SessionManager.getSessionUser(req.session)
-  const { personalSubscription } =
-    await SubscriptionViewModelBuilder.promises.buildUsersSubscriptionViewModel(
-      user
-    )
-
-  const postCheckoutRedirect = req.session?.postCheckoutRedirect
-
-  if (!personalSubscription) {
-    res.redirect('/user/subscription/plans')
-  } else {
-    res.render('subscriptions/successful-subscription', {
       title: 'thank_you',
       personalSubscription,
       postCheckoutRedirect,
@@ -597,41 +489,14 @@ function cancelSubscription(req, res, next) {
   })
 }
 
-async function canceledSubscription(req, res, next) {
-  try {
-    const assignment = await SplitTestHandler.promises.getAssignment(
-      req,
-      res,
-      'subscription-pages-react'
-    )
-    if (assignment.variant === 'active') {
-      await _canceledSubscriptionReact(req, res, next)
-    } else {
-      await _canceledSubscriptionAngular(req, res, next)
-    }
-  } catch (error) {
-    logger.warn(
-      { err: error },
-      'failed to get "subscription-pages-react" split test assignment'
-    )
-    await _canceledSubscriptionAngular(req, res, next)
-  }
-}
-
 /**
  * @param {import("express").Request} req
  * @param {import("express").Response} res
  * @param {import("express").NextFunction} next
  * @returns {Promise<void>}
  */
-function _canceledSubscriptionReact(req, res, next) {
+function canceledSubscription(req, res, next) {
   return res.render('subscriptions/canceled-subscription-react', {
-    title: 'subscription_canceled',
-  })
-}
-
-function _canceledSubscriptionAngular(req, res, next) {
-  return res.render('subscriptions/canceled-subscription', {
     title: 'subscription_canceled',
   })
 }
@@ -878,11 +743,13 @@ async function _getRecommendedCurrency(req, res) {
     req.query?.ip || req.ip
   )
   const countryCode = currencyLookup.countryCode
+  let assignmentINR, assignmentLATAM
   let recommendedCurrency = currencyLookup.currencyCode
-  let assignment
   // for #12703
   try {
-    assignment = await SplitTestHandler.promises.getAssignment(
+    // Split test is kept active, but all users geolocated in India can
+    // now use the INR currency (See #13507)
+    assignmentINR = await SplitTestHandler.promises.getAssignment(
       req,
       res,
       'geo-pricing-inr'
@@ -893,15 +760,30 @@ async function _getRecommendedCurrency(req, res) {
       'Failed to get assignment for geo-pricing-inr test'
     )
   }
-  // if the user has been detected as located in India (thus recommended INR as currency)
-  // but is not part of the geo pricing test, we fall back to the default currency instead
-  if (recommendedCurrency === 'INR' && assignment?.variant !== 'inr') {
+  // for #13559
+  try {
+    assignmentLATAM = await SplitTestHandler.promises.getAssignment(
+      req,
+      res,
+      'geo-pricing-latam'
+    )
+  } catch (error) {
+    logger.error(
+      { err: error },
+      'Failed to get assignment for geo-pricing-latam test'
+    )
+  }
+  if (
+    ['BRL', 'MXN', 'COP', 'CLP', 'PEN'].includes(recommendedCurrency) &&
+    assignmentLATAM?.variant !== 'latam'
+  ) {
     recommendedCurrency = GeoIpLookup.DEFAULT_CURRENCY_CODE
   }
   return {
     recommendedCurrency,
     countryCode,
-    geoPricingTestVariant: assignment?.variant,
+    geoPricingINRTestVariant: assignmentINR?.variant,
+    geoPricingLATAMTestVariant: assignmentLATAM?.variant,
   }
 }
 

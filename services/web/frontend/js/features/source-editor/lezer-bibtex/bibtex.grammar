@@ -1,0 +1,96 @@
+@top Bibliography {
+  (Other | Declaration | CommentDeclaration | PreambleDeclaration | StringDeclaration)*
+}
+
+@tokens {
+  Other { ![@ \t\n] ![@]* }
+  whiteSpace { $[\t\n ]+ }
+  Identifier { ![,{} \t\n%]+ }
+  StringName { $[a-zA-Z:_] $[a-zA-Z:_0-9-]* }
+  FieldName {$[a-zA-Z-_0-9]+}
+  LiteralString {
+    '"' (!["] | "\\" _)* '"'?
+  }
+  EntryTypeName { $[a-zA-Z]+ }
+  Number { @digit+ }
+  StringKeyword {"@"$[Ss]$[Tt]$[Rr]$[Ii]$[Nn]$[Gg]}
+  PreambleKeyword {"@"$[Pp]$[Rr]$[Ee]$[Aa]$[Mm]$[Bb]$[Ll]$[Ee]}
+  CommentKeyword {"@"$[Cc]$[Oo]$[Mm]$[Mm]$[Ee]$[Nn]$[Tt]}
+  CommentContents { ![@} \t\n] ![}@]* }
+  "{"[closedBy="}"]
+  "}"[openedBy="{"]
+  "@" "\"" "," "#" "@string"
+}
+
+@skip { whiteSpace }
+
+StringDeclaration {
+  StringKeyword "{"
+      Field<StringName>*
+  "}"
+}
+
+PreambleDeclaration {
+  PreambleKeyword "{"
+      Expression
+  "}"
+}
+
+CommentDeclaration {
+  CommentKeyword "{"
+      CommentContents*
+  "}"
+}
+
+Declaration {
+  EntryName { "@" EntryTypeName }  "{"
+      Identifier
+      
+      fieldEntry { 
+        (","  Field<FieldName> )
+      }*
+      ("," )?
+  "}"
+}
+
+Field<Name> {
+  Name  "="  Expression
+}
+
+Expression {
+  BracedString |
+  Number | 
+  StringConcatenation
+}
+
+@local tokens {
+  OpenBracedContents[closedBy="}", @name="{"] {"{"}
+  CloseBracedContents[openedBy="{", @name="}"] {"}"}
+  @else nonClosingBracedContents
+}
+
+@skip {}{
+  BracedStringContents {
+  (
+      nonClosingBracedContents |
+      nestedBracedString {
+        OpenBracedContents
+        BracedStringContents
+        CloseBracedContents
+      }
+    )*
+}
+  BracedString {
+    "{" BracedStringContents CloseBracedContents
+  }  
+}
+
+@precedence { concatenation @left }
+
+StringConcatenation {
+  StringConcatenation !concatenation "#" StringConcatenation |
+  LiteralString |
+  StringName
+}
+
+@external propSource highlighting from "./highlight.mjs"

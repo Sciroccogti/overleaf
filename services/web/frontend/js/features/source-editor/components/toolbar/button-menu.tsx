@@ -3,14 +3,29 @@ import { Button, ListGroup, Overlay, Popover } from 'react-bootstrap'
 import Icon from '../../../../shared/components/icon'
 import useDropdown from '../../../../shared/hooks/use-dropdown'
 import Tooltip from '../../../../shared/components/tooltip'
+import { EditorView } from '@codemirror/view'
+import { emitToolbarEvent } from '../../extensions/toolbar/utils/analytics'
+import { useCodeMirrorViewContext } from '../codemirror-editor'
+import MaterialIcon from '../../../../shared/components/material-icon'
 
 export const ToolbarButtonMenu: FC<{
   id: string
   label: string
   icon: string
-}> = memo(function ButtonMenu({ icon, id, label, children }) {
+  materialIcon?: boolean
+  altCommand?: (view: EditorView) => void
+}> = memo(function ButtonMenu({
+  icon,
+  id,
+  label,
+  materialIcon,
+  altCommand,
+  children,
+}) {
   const target = useRef<any>(null)
   const { open, onToggle, ref } = useDropdown()
+  const view = useCodeMirrorViewContext()
+
   const button = (
     <Button
       type="button"
@@ -21,12 +36,19 @@ export const ToolbarButtonMenu: FC<{
         event.preventDefault()
         event.stopPropagation()
       }}
-      onClick={() => {
-        onToggle(!open)
+      onClick={event => {
+        if (event.altKey && altCommand && open === false) {
+          emitToolbarEvent(view, id)
+          event.preventDefault()
+          altCommand(view)
+          view.focus()
+        } else {
+          onToggle(!open)
+        }
       }}
       ref={target}
     >
-      <Icon type={icon} fw />
+      {materialIcon ? <MaterialIcon type={icon} /> : <Icon type={icon} fw />}
     </Button>
   )
 
@@ -35,7 +57,7 @@ export const ToolbarButtonMenu: FC<{
       show={open}
       target={target.current}
       placement="bottom"
-      container={document.querySelector('.cm-editor')}
+      container={view.dom}
       containerPadding={0}
       animation
       onHide={() => onToggle(false)}

@@ -32,7 +32,6 @@ const SplitTestHandler = require('../SplitTests/SplitTestHandler')
 /** @typedef {import("../../../../types/project/dashboard/api").Sort} Sort */
 /** @typedef {import("./types").AllUsersProjects} AllUsersProjects */
 /** @typedef {import("./types").MongoProject} MongoProject */
-
 /** @typedef {import("../Tags/types").Tag} Tag */
 
 const _ssoAvailable = (affiliation, session, linkedInstitutionIds) => {
@@ -90,6 +89,10 @@ async function projectListPage(req, res, next) {
   // - object - the subscription data object
   let usersBestSubscription
   let survey
+  let userIsMemberOfGroupSubscription = false
+  let groupSubscriptionsPendingEnrollment = []
+
+  const isSaas = Features.hasFeature('saas')
 
   const userId = SessionManager.getLoggedInUserId(req.session)
   const projectsBlobPending = _getProjects(userId).catch(err => {
@@ -98,7 +101,9 @@ async function projectListPage(req, res, next) {
   })
   const user = await User.findById(
     userId,
-    'email emails features lastPrimaryEmailCheck signUpDate'
+    `email emails features lastPrimaryEmailCheck signUpDate${
+      isSaas ? ' enrollment' : ''
+    }`
   )
 
   // Handle case of deleted user
@@ -107,7 +112,7 @@ async function projectListPage(req, res, next) {
     return
   }
 
-  if (Features.hasFeature('saas')) {
+  if (isSaas) {
     try {
       usersBestSubscription =
         await SubscriptionViewModelBuilder.promises.getBestSubscription({
@@ -117,6 +122,24 @@ async function projectListPage(req, res, next) {
       logger.err(
         { err: error, userId },
         "Failed to get user's best subscription"
+      )
+    }
+    try {
+      const { isMember, subscriptions } =
+        await LimitationsManager.promises.userIsMemberOfGroupSubscription(user)
+
+      userIsMemberOfGroupSubscription = isMember
+
+      // TODO use helper function
+      if (!user.enrollment?.managedBy) {
+        groupSubscriptionsPendingEnrollment = subscriptions.filter(
+          subscription => subscription.groupPlan && subscription.groupPolicy
+        )
+      }
+    } catch (error) {
+      logger.error(
+        { err: error },
+        'Failed to check whether user is a member of group subscription'
       )
     }
 
@@ -280,20 +303,6 @@ async function projectListPage(req, res, next) {
     status: prefetchedProjectsBlob ? 'success' : 'too-slow',
   })
 
-  let userIsMemberOfGroupSubscription = false
-  try {
-    const userIsMemberOfGroupSubscriptionPromise =
-      await LimitationsManager.promises.userIsMemberOfGroupSubscription(user)
-
-    userIsMemberOfGroupSubscription =
-      userIsMemberOfGroupSubscriptionPromise.isMember
-  } catch (error) {
-    logger.error(
-      { err: error },
-      'Failed to check whether user is a member of group subscription'
-    )
-  }
-
   // in v2 add notifications for matching university IPs
   if (Settings.overleaf != null && req.ip !== user.lastLoginIp) {
     try {
@@ -354,24 +363,70 @@ async function projectListPage(req, res, next) {
     }
   }
 
-  let showINRBanner = false
+  let showInrGeoBanner, inrGeoBannerSplitTestName
+  let inrGeoBannerVariant = 'default'
+  let showLATAMBanner = false
+  let recommendedCurrency
   if (usersBestSubscription?.type === 'free') {
+    const { currencyCode, countryCode } =
+      await GeoIpLookup.promises.getCurrencyCode(req.ip)
+    let inrGeoPricingVariant = 'default'
     try {
+      // Split test is kept active, but all users geolocated in India can
+      // now use the INR currency (See #13507)
       const inrGeoPricingAssignment =
         await SplitTestHandler.promises.getAssignment(
           req,
           res,
           'geo-pricing-inr'
         )
-      const geoDetails = await GeoIpLookup.promises.getDetails(req.ip)
-      showINRBanner =
-        inrGeoPricingAssignment.variant === 'inr' &&
-        geoDetails?.country_code === 'IN'
+      inrGeoPricingVariant = inrGeoPricingAssignment.variant
     } catch (error) {
       logger.error(
         { err: error },
-        'Failed to get INR geo pricing lookup or assignment'
+        'Failed to get geo-pricing-inr split test assignment'
       )
+    }
+    try {
+      const latamGeoPricingAssignment =
+        await SplitTestHandler.promises.getAssignment(
+          req,
+          res,
+          'geo-pricing-latam'
+        )
+      showLATAMBanner =
+        latamGeoPricingAssignment.variant === 'latam' &&
+        ['BR', 'MX', 'CO', 'CL', 'PE'].includes(countryCode)
+      // LATAM Banner needs to know which currency to display
+      if (showLATAMBanner) {
+        recommendedCurrency = currencyCode
+      }
+    } catch (error) {
+      logger.error(
+        { err: error },
+        'Failed to get geo-pricing-latam split test assignment'
+      )
+    }
+    if (countryCode === 'IN') {
+      inrGeoBannerSplitTestName =
+        inrGeoPricingVariant === 'inr'
+          ? 'geo-banners-inr-2'
+          : 'geo-banners-inr-1'
+      try {
+        const geoBannerAssignment =
+          await SplitTestHandler.promises.getAssignment(
+            req,
+            res,
+            inrGeoBannerSplitTestName
+          )
+        showInrGeoBanner = true
+        inrGeoBannerVariant = geoBannerAssignment.variant
+      } catch (error) {
+        logger.error(
+          { err: error },
+          `Failed to get INR geo banner lookup or assignment (${inrGeoBannerSplitTestName})`
+        )
+      }
     }
   }
 
@@ -392,9 +447,18 @@ async function projectListPage(req, res, next) {
     showGroupsAndEnterpriseBanner,
     groupsAndEnterpriseBannerVariant,
     showWritefullPromoBanner,
-    showINRBanner,
+    showLATAMBanner,
+    recommendedCurrency,
+    showInrGeoBanner,
+    inrGeoBannerVariant,
+    inrGeoBannerSplitTestName,
     projectDashboardReact: true, // used in navbar
     welcomePageRedesignVariant: welcomePageRedesignAssignment.variant,
+    groupSubscriptionsPendingEnrollment:
+      groupSubscriptionsPendingEnrollment.map(subscription => ({
+        groupId: subscription._id,
+        groupName: subscription.teamName,
+      })),
   })
 }
 

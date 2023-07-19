@@ -64,6 +64,28 @@ export function getAncestorStack(
   return stack.reverse()
 }
 
+export const wrappedNodeOfType = (
+  state: EditorState,
+  range: SelectionRange,
+  type: string | number
+): SyntaxNode | null => {
+  if (range.empty) {
+    return null
+  }
+
+  const ancestorNode = ancestorNodeOfType(state, range.from, type, 1)
+
+  if (
+    ancestorNode &&
+    ancestorNode.from === range.from &&
+    ancestorNode.to === range.to
+  ) {
+    return ancestorNode
+  }
+
+  return null
+}
+
 export const ancestorNodeOfType = (
   state: EditorState,
   pos: number,
@@ -99,19 +121,33 @@ export const ancestorOfNodeWithType = (
   return null
 }
 
+export const lastAncestorAtEndPosition = (
+  node: SyntaxNode | null | undefined,
+  to: number
+): SyntaxNode | null => {
+  for (let ancestor = node; ancestor; ancestor = ancestor.parent) {
+    if (ancestor.parent?.to === to) {
+      continue
+    } else if (ancestor.to === to) {
+      return ancestor
+    }
+  }
+  return null
+}
+
 export const descendantsOfNodeWithType = (
   node: SyntaxNode,
   type: string | number,
-  nested = false
+  leaveType?: string | number
 ): SyntaxNode[] => {
   const children: SyntaxNode[] = []
 
   node.cursor().iterate(nodeRef => {
     if (nodeRef.type.is(type)) {
       children.push(nodeRef.node)
-      if (!nested) {
-        return false
-      }
+    }
+    if (leaveType && nodeRef.type.is(leaveType) && nodeRef.node !== node) {
+      return false
     }
   })
 

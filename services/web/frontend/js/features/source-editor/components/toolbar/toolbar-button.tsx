@@ -4,7 +4,7 @@ import { useCodeMirrorViewContext } from '../codemirror-editor'
 import { Button } from 'react-bootstrap'
 import classnames from 'classnames'
 import Tooltip from '../../../../shared/components/tooltip'
-import { emitCommandEvent } from '../../extensions/toolbar/utils/analytics'
+import { emitToolbarEvent } from '../../extensions/toolbar/utils/analytics'
 import Icon from '../../../../shared/components/icon'
 
 export const ToolbarButton = memo<{
@@ -38,7 +38,7 @@ export const ToolbarButton = memo<{
 
   const handleClick = useCallback(
     event => {
-      emitCommandEvent(view, id)
+      emitToolbarEvent(view, id)
       if (command) {
         event.preventDefault()
         command(view)
@@ -53,10 +53,10 @@ export const ToolbarButton = memo<{
       className={classnames('ol-cm-toolbar-button', className, { hidden })}
       aria-label={label}
       onMouseDown={handleMouseDown}
-      onClick={handleClick}
+      onClick={!disabled ? handleClick : undefined}
       bsStyle={null}
       active={active}
-      disabled={disabled}
+      aria-disabled={disabled}
       type="button"
     >
       {textIcon ? icon : <Icon type={icon} fw accessibilityLabel={label} />}

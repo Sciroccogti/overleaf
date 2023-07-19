@@ -10,10 +10,10 @@ type Preamble = {
     node: SyntaxNode
     content: string
   }
-  author?: {
+  authors: {
     node: SyntaxNode
     content: string
-  }
+  }[]
 }
 
 export class MakeTitleWidget extends WidgetType {
@@ -32,18 +32,16 @@ export class MakeTitleWidget extends WidgetType {
   }
 
   eq(widget: MakeTitleWidget) {
-    return isShallowEqualPreamble(widget.preamble, this.preamble, [
-      'title',
-      'author',
-    ])
+    return isShallowEqualPreamble(widget.preamble, this.preamble)
   }
 
-  // TODO: needs view
-  // updateDOM(element: HTMLElement): boolean {
-  //   this.destroyed = false
-  //   this.buildContent(view, element)
-  //   return true
-  // }
+  updateDOM(element: HTMLElement, view: EditorView): boolean {
+    this.destroyed = false
+    element.textContent = ''
+    this.buildContent(view, element)
+    view.requestMeasure()
+    return true
+  }
 
   ignoreEvent(event: Event) {
     return event.type !== 'mouseup'
@@ -79,26 +77,30 @@ export class MakeTitleWidget extends WidgetType {
         })
     }
 
-    if (this.preamble.author) {
-      const authorsElement = buildAuthorsElement(
-        view.state,
-        this.preamble.author.node
-      )
-      authorsElement.addEventListener('mouseup', () => {
-        if (this.preamble.author) {
-          selectNode(view, this.preamble.author.node)
-        }
-      })
+    if (this.preamble.authors.length) {
+      const authorsElement = buildAuthorsElement(this.preamble.authors, view)
       element.append(authorsElement)
     }
   }
 }
 
-const isShallowEqualPreamble = (
-  a: Preamble,
-  b: Preamble,
-  fields: Array<keyof Preamble>
-) => fields.every(field => a[field]?.content === b[field]?.content)
+function isShallowEqualPreamble(a: Preamble, b: Preamble) {
+  if (a.title?.content !== b.title?.content) {
+    return false // title changed
+  }
+
+  if (a.authors.length !== b.authors.length) {
+    return false // number of authors changed
+  }
+
+  for (let i = 0; i < a.authors.length; i++) {
+    if (a.authors[i].content !== b.authors[i].content) {
+      return false // author changed
+    }
+  }
+
+  return true
+}
 
 function buildTitleElement(
   state: EditorState,
@@ -111,28 +113,39 @@ function buildTitleElement(
 }
 
 function buildAuthorsElement(
-  state: EditorState,
-  argumentNode: SyntaxNode
-): HTMLDivElement {
-  const element = document.createElement('div')
-  element.classList.add('ol-cm-authors')
+  authors: { node: SyntaxNode; content: string }[],
+  view: EditorView
+) {
+  const authorsElement = document.createElement('div')
+  authorsElement.classList.add('ol-cm-authors')
 
-  const content = state.sliceDoc(argumentNode.from + 1, argumentNode.to - 1)
-  const authors = content.replaceAll(/\s+/g, ' ').split('\\and')
+  for (const { node } of authors) {
+    const typesettedAuthors = document.createElement('div')
+    typesetNodeIntoElement(node, typesettedAuthors, view.state)
 
-  for (const authorParts of authors) {
-    const authorElement = document.createElement('div')
-    authorElement.classList.add('ol-cm-author')
+    let currentAuthor = document.createElement('div')
+    currentAuthor.classList.add('ol-cm-author')
+    authorsElement.append(currentAuthor)
 
-    for (const authorInfoItem of authorParts.split('\\\\')) {
-      const authorLineElement = document.createElement('div')
-      authorLineElement.classList.add('ol-cm-author-line')
-      authorLineElement.textContent = authorInfoItem.trim()
-      authorElement.appendChild(authorLineElement)
+    while (typesettedAuthors.firstChild) {
+      const child = typesettedAuthors.firstChild
+      if (
+        child instanceof HTMLElement &&
+        child.classList.contains('ol-cm-command-and')
+      ) {
+        currentAuthor = document.createElement('div')
+        currentAuthor.classList.add('ol-cm-author')
+        authorsElement.append(currentAuthor)
+        child.remove()
+      } else {
+        currentAuthor.append(child)
+      }
     }
 
-    element.append(authorElement)
+    currentAuthor.addEventListener('mouseup', () => {
+      selectNode(view, node)
+    })
   }
 
-  return element
+  return authorsElement
 }

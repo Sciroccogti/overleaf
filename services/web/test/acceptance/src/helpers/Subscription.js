@@ -1,6 +1,9 @@
 const { db, ObjectId } = require('../../../../app/src/infrastructure/mongodb')
 const { expect } = require('chai')
+const { promisify } = require('util')
 const SubscriptionUpdater = require('../../../../app/src/Features/Subscription/SubscriptionUpdater')
+const ManagedUsersHandler = require('../../../../app/src/Features/Subscription/ManagedUsersHandler')
+const PermissionsManager = require('../../../../app/src/Features/Authorization/PermissionsManager')
 const SubscriptionModel =
   require('../../../../app/src/models/Subscription').Subscription
 const DeletedSubscriptionModel =
@@ -43,6 +46,10 @@ class Subscription {
     db.subscriptions.findOne({ _id: ObjectId(this._id) }, callback)
   }
 
+  getWithGroupPolicy(callback) {
+    SubscriptionModel.findById(this._id).populate('groupPolicy').exec(callback)
+  }
+
   setManagerIds(managerIds, callback) {
     return SubscriptionModel.findOneAndUpdate(
       { _id: ObjectId(this._id) },
@@ -53,6 +60,36 @@ class Subscription {
 
   refreshUsersFeatures(callback) {
     SubscriptionUpdater.refreshUsersFeatures(this, callback)
+  }
+
+  enableManagedUsers(callback) {
+    ManagedUsersHandler.enableManagedUsers(this._id, callback)
+  }
+
+  getGroupPolicyForUser(user, callback) {
+    ManagedUsersHandler.getGroupPolicyForUser(user, callback)
+  }
+
+  getCapabilities(groupPolicy) {
+    return PermissionsManager.getUserCapabilities(groupPolicy)
+  }
+
+  getUserValidationStatus(user, groupPolicy, subscription, callback) {
+    PermissionsManager.getUserValidationStatus(
+      user,
+      groupPolicy,
+      subscription,
+      callback
+    )
+  }
+
+  enrollManagedUser(user, callback) {
+    SubscriptionModel.findById(this._id).exec((error, subscription) => {
+      if (error) {
+        return callback(error)
+      }
+      ManagedUsersHandler.enrollInSubscription(user._id, subscription, callback)
+    })
   }
 
   expectDeleted(deleterData, callback) {
@@ -85,5 +122,17 @@ class Subscription {
     )
   }
 }
+
+Subscription.promises = class extends Subscription {}
+
+// promisify User class methods - works for methods with 0-1 output parameters,
+// otherwise we will need to implement the method manually instead
+const nonPromiseMethods = ['constructor', 'getCapabilities']
+Object.getOwnPropertyNames(Subscription.prototype).forEach(methodName => {
+  const method = Subscription.prototype[methodName]
+  if (typeof method === 'function' && !nonPromiseMethods.includes(methodName)) {
+    Subscription.promises.prototype[methodName] = promisify(method)
+  }
+})
 
 module.exports = Subscription

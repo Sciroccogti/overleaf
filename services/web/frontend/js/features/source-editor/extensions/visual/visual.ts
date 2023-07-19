@@ -12,16 +12,18 @@ import { markDecorations } from './mark-decorations'
 import { EditorView, ViewPlugin } from '@codemirror/view'
 import { visualKeymap } from './visual-keymap'
 import { skipPreambleWithCursor } from './skip-preamble-cursor'
-import { mouseDownEffect, mouseDownListener } from './selection'
+import { mousedown, mouseDownEffect } from './selection'
 import { findEffect } from '../../utils/effects'
 import { forceParsing, syntaxTree } from '@codemirror/language'
 import { hasLanguageLoadedEffect } from '../language'
 import { restoreScrollPosition } from '../scroll-position'
-import { toolbarPanel } from '../toolbar/toolbar-panel'
 import { CurrentDoc } from '../../../../../../types/current-doc'
 import isValidTeXFile from '../../../../main/is-valid-tex-file'
 import { listItemMarker } from './list-item-marker'
 import { figureModalPasteHandler } from '../figure-modal'
+import { isSplitTestEnabled } from '../../../../utils/splitTestUtils'
+import { toolbarPanel } from '../toolbar/toolbar-panel'
+import { selectDecoratedArgument } from './select-decorated-argument'
 
 type Options = {
   visual: boolean
@@ -110,6 +112,11 @@ export const sourceOnly = (visual: boolean, extension: Extension) => {
 }
 
 const parsedAttributesConf = new Compartment()
+
+/**
+ * A view plugin which shows the editor content, makes it focusable,
+ * and restores the scroll position, once the initial decorations have been applied.
+ */
 const showContentWhenParsed = [
   parsedAttributesConf.of([EditorView.editable.of(false)]),
   ViewPlugin.define(view => {
@@ -164,6 +171,9 @@ const showContentWhenParsed = [
   }),
 ]
 
+/**
+ * A transaction extender which scrolls mouse clicks into view, in case decorations have moved the cursor out of view.
+ */
 const scrollJumpAdjuster = EditorState.transactionExtender.of(tr => {
   // Attach a "scrollIntoView" effect on all mouse selections to adjust for
   // any jumps that may occur when hiding/showing decorations.
@@ -183,14 +193,15 @@ const scrollJumpAdjuster = EditorState.transactionExtender.of(tr => {
 const extension = (options: Options) => [
   visualTheme,
   visualHighlightStyle,
-  mouseDownListener,
+  mousedown,
   listItemMarker,
   markDecorations,
   atomicDecorations(options),
   skipPreambleWithCursor,
   visualKeymap,
-  toolbarPanel(),
   scrollJumpAdjuster,
+  isSplitTestEnabled('source-editor-toolbar') ? [] : toolbarPanel(),
+  selectDecoratedArgument,
   showContentWhenParsed,
   figureModalPasteHandler(),
 ]

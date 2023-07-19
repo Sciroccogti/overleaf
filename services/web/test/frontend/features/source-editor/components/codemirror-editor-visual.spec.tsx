@@ -10,7 +10,7 @@ const Container: FC = ({ children }) => (
   <div style={{ width: 785, height: 785 }}>{children}</div>
 )
 
-describe('<CodeMirrorEditor/> in Rich Text mode', function () {
+describe('<CodeMirrorEditor/> in Visual mode', function () {
   beforeEach(function () {
     window.metaAttributesCache.set('ol-preventCompileOnLoad', true)
     window.metaAttributesCache.set(
@@ -46,6 +46,10 @@ describe('<CodeMirrorEditor/> in Rich Text mode', function () {
     cy.get('@first-line').click()
   })
 
+  afterEach(function () {
+    window.metaAttributesCache.clear()
+  })
+
   forEach(['LaTeX', 'TeX']).it('renders the %s logo', function (logo) {
     cy.get('@first-line').type(`\\${logo}{{}}{Enter}`)
     cy.get('@first-line').should('have.text', logo)
@@ -64,25 +68,21 @@ describe('<CodeMirrorEditor/> in Rich Text mode', function () {
     // select the first autocomplete item
     cy.findByRole('option').eq(0).click()
 
-    cy.get('@first-line').should('have.text', '\\begin{itemize}')
-    cy.get('@second-line')
+    cy.get('@first-line')
       .should('have.text', ' ')
       .find('.ol-cm-item')
       .should('have.length', 1)
-    cy.get('@third-line').should('have.text', '\\end{itemize}')
 
-    cy.get('@second-line').type('test{Enter}test')
+    cy.get('@first-line').type('test{Enter}test')
 
-    cy.get('@first-line').should('have.text', '\\begin{itemize}')
+    cy.get('@first-line')
+      .should('have.text', ' test')
+      .find('.ol-cm-item')
+      .should('have.length', 1)
     cy.get('@second-line')
       .should('have.text', ' test')
       .find('.ol-cm-item')
       .should('have.length', 1)
-    cy.get('@third-line')
-      .should('have.text', ' test')
-      .find('.ol-cm-item')
-      .should('have.length', 1)
-    cy.get('@fourth-line').should('have.text', '\\end{itemize}')
   })
 
   it('finishes a list on Enter in the last item if empty', function () {
@@ -91,10 +91,9 @@ describe('<CodeMirrorEditor/> in Rich Text mode', function () {
     // select the first autocomplete item
     cy.findByRole('option').eq(0).click()
 
-    cy.get('@second-line').type('test{Enter}{Enter}')
+    cy.get('@first-line').type('test{Enter}{Enter}')
 
-    cy.get('.cm-line')
-      .eq(0)
+    cy.get('@first-line')
       .should('have.text', ' test')
       .find('.ol-cm-item')
       .should('have.length', 1)
@@ -109,18 +108,7 @@ describe('<CodeMirrorEditor/> in Rich Text mode', function () {
     cy.findByRole('option').eq(0).click()
 
     cy.get('@second-line').type('test{Enter}test{Enter}{upArrow}{Enter}{Enter}')
-
-    const lines = [
-      '\\begin{itemize}',
-      ' test',
-      ' ',
-      ' ',
-      ' test',
-      ' ',
-      '\\end{itemize}',
-    ]
-
-    cy.get('.cm-content').should('have.text', lines.join(''))
+    cy.get('.cm-content').should('have.text', ' testtest')
   })
 
   forEach(['textbf', 'textit', 'underline']).it(
@@ -151,24 +139,34 @@ describe('<CodeMirrorEditor/> in Rich Text mode', function () {
     cy.get('@first-line').should('have.text', `\\${command}{}`)
     cy.get('@first-line').type('{rightArrow} ')
     cy.get('@first-line').should('have.text', `\\${command}{} `)
-    // Press enter before closing brace
-    cy.get('@first-line').type('{Backspace}{leftArrow}title{leftArrow}{Enter}')
-    cy.get('@first-line').should('have.text', 'title')
+    // Type a section heading
+    cy.get('@first-line').type('{Backspace}{leftArrow}title')
+    cy.get('@first-line').should('have.text', '{title}') // braces are visible as cursor is adjacent
+    cy.get('@first-line').type('{leftArrow}')
+    cy.get('@first-line').should('have.text', 'title') // braces are hidden as cursor is not adjacent
+    cy.get('@first-line').type('{Enter}')
+    cy.get('@first-line').should('have.text', 'title') // braces are hidden as cursor is on the next line
     cy.get('@first-line').find(`.ol-cm-heading.ol-cm-command-${command}`)
   })
 
-  forEach(['textsc', 'texttt', 'sout', 'emph', 'url', 'caption']).it(
-    'handles \\%s text',
-    function (command) {
-      cy.get('@first-line').type(`\\${command}{`)
-      cy.get('@first-line').should('have.text', `\\${command}{}`)
-      cy.get('@first-line').type('{rightArrow} ')
-      cy.get('@first-line').should('have.text', `\\${command}{} `)
-      cy.get('@first-line').type('{Backspace}{leftArrow}test text{rightArrow} ')
-      cy.get('@first-line').should('have.text', 'test text ')
-      cy.get('@first-line').find(`.ol-cm-command-${command}`)
-    }
-  )
+  forEach([
+    'textsc',
+    'texttt',
+    'textmd',
+    'textsf',
+    'sout',
+    'emph',
+    'url',
+    'caption',
+  ]).it('handles \\%s text', function (command) {
+    cy.get('@first-line').type(`\\${command}{`)
+    cy.get('@first-line').should('have.text', `\\${command}{}`)
+    cy.get('@first-line').type('{rightArrow} ')
+    cy.get('@first-line').should('have.text', `\\${command}{} `)
+    cy.get('@first-line').type('{Backspace}{leftArrow}test text{rightArrow} ')
+    cy.get('@first-line').should('have.text', 'test text ')
+    cy.get('@first-line').find(`.ol-cm-command-${command}`)
+  })
 
   it('handles \\verb text', function () {
     cy.get('@first-line').type(`\\verb|`)
@@ -266,6 +264,54 @@ describe('<CodeMirrorEditor/> in Rich Text mode', function () {
         .should('not.have.class', 'ol-cm-environment-centered')
     })
   })
+
+  describe('verbatim environments', function () {
+    beforeEach(function () {
+      cy.get('@first-line').type('\\begin{{}verbatim')
+      cy.get('@first-line').type('{Enter}test') // end with cursor in content
+    })
+
+    it('marks lines as verbatim environments', function () {
+      // inside the environment
+      cy.get('@second-line').should('have.class', 'ol-cm-environment-verbatim')
+
+      // outside the environment
+      cy.get('.cm-line')
+        .eq(4)
+        .should('not.have.class', 'ol-cm-environment-verbatim')
+
+      // move the cursor out of the environment
+      cy.get('.cm-line').eq(4).click()
+
+      cy.get('.cm-content').should('have.text', '    test')
+    })
+  })
+
+  describe('lstlisting environments', function () {
+    beforeEach(function () {
+      cy.get('@first-line').type('\\begin{{}lstlisting')
+      cy.get('@first-line').type('{Enter}test') // end with cursor in content
+    })
+
+    it('marks lines as lstlisting environments', function () {
+      // inside the environment
+      cy.get('@second-line').should(
+        'have.class',
+        'ol-cm-environment-lstlisting'
+      )
+
+      // outside the environment
+      cy.get('.cm-line')
+        .eq(4)
+        .should('not.have.class', 'ol-cm-environment-lstlisting')
+
+      // move the cursor out of the environment
+      cy.get('.cm-line').eq(4).click()
+
+      cy.get('.cm-content').should('have.text', '    test')
+    })
+  })
+
   describe('Toolbar', function () {
     describe('Formatting buttons highlighting', function () {
       it('handles empty selections inside of bold', function () {
@@ -368,10 +414,253 @@ describe('<CodeMirrorEditor/> in Rich Text mode', function () {
     cy.get('.ol-cm-maketitle')
     cy.get('.ol-cm-title').should('contain.html', 'Document title<br>with')
     cy.get('.ol-cm-author').should('have.text', 'Author')
+
+    cy.get('.ol-cm-preamble-widget').click()
+    const deleteLine =
+      '{command}{leftArrow}{shift}{command}{rightArrow}{backspace}'
+
+    // italic, bold and emph
+    cy.get('@second-line').type(deleteLine)
+    cy.get('@second-line').type(
+      '\\title{{}formatted with \\textit{{}italic} \\textbf{{}bold} \\emph{{}emph}}'
+    )
+    cy.get('.ol-cm-title').should(
+      'contain.html',
+      'formatted with <i>italic</i> <b>bold</b> <em>emph</em>'
+    )
+
+    cy.get('@second-line').type(deleteLine)
+    cy.get('@second-line').type(
+      '\\title{{}title\\\\ \\textbf{{}\\textit{{}\\emph{{}formated}}} \\textit{{}only italic}}'
+    )
+    cy.get('.ol-cm-title').should(
+      'contain.html',
+      'title<br> <b><i><em>formated</em></i></b> <i>only italic</i>'
+    )
+
+    // texttt command
+    cy.get('@second-line').type(deleteLine)
+    cy.get('@second-line').type('\\title{{}title with \\texttt{{}command}}')
+    cy.get('.ol-cm-title').should(
+      'contain.html',
+      'title with <span class="ol-cm-command-texttt">command</span>'
+    )
+
+    cy.get('@second-line').type(deleteLine)
+    cy.get('@second-line').type(
+      '\\title{{}title with \\texttt{{}\\textbf{{}command}}}'
+    )
+    cy.get('.ol-cm-title').should(
+      'contain.html',
+      'title with <span class="ol-cm-command-texttt"><b>command</b></span>'
+    )
+
+    // unsupported commands
+    cy.get('@second-line').type(deleteLine)
+    cy.get('@second-line').type('\\title{{}Title with \\& ampersands}')
+    cy.get('.ol-cm-title').should(
+      'contain.html',
+      'Title with \\&amp; ampersands'
+    )
+
+    cy.get('@second-line').type(deleteLine)
+    cy.get('@second-line').type('\\title{{}My \\LaTeX{{}} document}')
+    cy.get('.ol-cm-title').should('contain.html', 'My \\LaTeX{} document')
   })
+
+  it('decorates footnotes', function () {
+    cy.get('@first-line').type('Foo \\footnote{{}Bar.} ')
+    cy.get('@first-line').should('contain', 'Foo')
+    cy.get('@first-line').should('not.contain', 'Bar')
+    cy.get('@first-line').type('{leftArrow}')
+    cy.get('@first-line').should('have.text', 'Foo \\footnote{Bar.} ')
+  })
+
+  it('should show document preamble', function () {
+    cy.get('@first-line').type(
+      [
+        '\\author{{}Author}',
+        '\\title{{}Document title}',
+        '\\begin{{}document}',
+        '\\maketitle',
+        '\\end{{}document}',
+        '',
+      ].join('{Enter}')
+    )
+    cy.get('.ol-cm-preamble-widget').should('have.length', 1)
+    cy.get('.ol-cm-preamble-widget').click()
+
+    cy.get('.ol-cm-preamble-line').eq(0).should('contain', '\\author{Author}')
+    cy.get('.ol-cm-preamble-line')
+      .eq(1)
+      .should('contain', '\\title{Document title}')
+    cy.get('.ol-cm-preamble-line').eq(2).should('contain', '\\begin{document}')
+    cy.get('.ol-cm-preamble-line').eq(3).should('not.exist')
+  })
+
+  it('should show multiple authors', function () {
+    cy.get('@first-line').type(
+      [
+        '\\author{{}Author \\and Author2}',
+        '\\author{{}Author3}',
+        '\\title{{}Document title}',
+        '\\begin{{}document}',
+        '\\maketitle',
+        '\\end{{}document}',
+        '',
+      ].join('{Enter}')
+    )
+    cy.get('.ol-cm-preamble-widget').should('have.length', 1)
+    cy.get('.ol-cm-preamble-widget').click()
+
+    cy.get('.ol-cm-authors').should('have.length', 1)
+    cy.get('.ol-cm-authors .ol-cm-author').should('have.length', 3)
+  })
+
+  it('should update authors', function () {
+    cy.get('@first-line').type(
+      [
+        '\\author{{}Author \\and Author2}',
+        '\\author{{}Author3}',
+        '\\title{{}Document title}',
+        '\\begin{{}document}',
+        '\\maketitle',
+        '\\end{{}document}',
+        '',
+      ].join('{Enter}')
+    )
+    cy.get('.ol-cm-preamble-widget').should('have.length', 1)
+    cy.get('.ol-cm-preamble-widget').click()
+
+    cy.get('.ol-cm-authors').should('have.length', 1)
+    cy.get('.ol-cm-author').eq(0).should('contain', 'Author')
+    cy.get('.ol-cm-author').eq(1).should('contain', 'Author2')
+    cy.get('.ol-cm-author').eq(2).should('contain', 'Author3')
+
+    cy.get('.ol-cm-author').eq(0).click()
+    cy.get('.ol-cm-preamble-line').eq(0).type('{leftarrow}{backspace}New')
+    cy.get('.ol-cm-author').eq(1).should('contain', 'AuthorNew')
+
+    // update author without changing node from/to coordinates
+    cy.get('.ol-cm-author').eq(0).click()
+    cy.get('.ol-cm-preamble-line').eq(0).type('{leftarrow}{shift}{leftarrow}X')
+    cy.get('.ol-cm-author').eq(1).should('contain', 'AuthorNeX')
+  })
+
+  it('should ignore some commands in author', function () {
+    cy.get('@first-line').type(
+      [
+        '\\author{{}Author with \\corref{{}cor1} and \\fnref{{}label2} in the name}',
+        '\\title{{}Document title}',
+        '\\begin{{}document}',
+        '\\maketitle',
+        '\\end{{}document}',
+        '',
+      ].join('{Enter}')
+    )
+
+    cy.get('.ol-cm-authors').should('have.length', 1)
+    cy.get('.ol-cm-author').should(
+      'contain.html',
+      'Author with  and  in the name'
+    )
+  })
+
+  describe('decorates color commands', function () {
+    it('decorates textcolor', function () {
+      cy.get('@first-line').type('\\textcolor{{}red}{{}foo}')
+      cy.get('.ol-cm-textcolor')
+        .should('have.length', 1)
+        .should('have.text', 'foo')
+        .should('have.attr', 'style', 'color: rgb(255,0,0)')
+    })
+
+    it('decorates colorbox', function () {
+      cy.get('@first-line').type('\\colorbox{{}yellow}{{}foo}')
+      cy.get('.ol-cm-colorbox')
+        .should('have.length', 1)
+        .should('have.text', 'foo')
+        .should('have.attr', 'style', 'background-color: rgb(255,255,0)')
+    })
+  })
+
+  describe('handling of special characters', function () {
+    it('decorates a tilde with a non-breaking space', function () {
+      cy.get('@first-line').type('Test~test')
+      cy.get('@first-line').should('have.text', 'Test\xa0test')
+    })
+
+    it('decorates a backslash-prefixed tilde with a tilde', function () {
+      cy.get('@first-line').type('Test\\~test')
+      cy.get('@first-line').should('have.text', 'Test~test')
+    })
+  })
+
+  describe('decorates theorems', function () {
+    it('decorates a proof environment', function () {
+      cy.get('@first-line').type(
+        ['\\begin{{}proof}{Enter}', 'foo{Enter}', '\\end{{}proof}{Enter}'].join(
+          ''
+        )
+      )
+      cy.get('.cm-content').should('have.text', 'Prooffoo')
+    })
+
+    it('decorates a theorem environment', function () {
+      cy.get('@first-line').type(
+        [
+          '\\begin{{}theorem}{Enter}',
+          'foo{Enter}',
+          '\\end{{}theorem}{Enter}',
+        ].join('')
+      )
+      cy.get('.cm-content').should('have.text', 'Theoremfoo')
+    })
+
+    it('decorates a theorem environment with a label', function () {
+      cy.get('@first-line').type(
+        [
+          '\\begin{{}theorem}[Bar]{Enter}',
+          'foo{Enter}',
+          '\\end{{}theorem}{Enter}',
+        ].join('')
+      )
+      cy.get('.cm-content').should('have.text', 'Theorem (Bar)foo')
+    })
+
+    it('decorates a custom theorem environment with a label', function () {
+      cy.get('@first-line').type(
+        [
+          '\\newtheorem{{}thm}{{}Foo}{Enter}',
+          '\\begin{{}thm}[Bar]{Enter}',
+          'foo{Enter}',
+          '\\end{{}thm}{Enter}',
+        ].join('')
+      )
+      cy.get('.cm-content').should(
+        'have.text',
+        ['\\newtheorem{thm}{Foo}', 'Foo (Bar)foo'].join('')
+      )
+    })
+  })
+
+  forEach(['quote', 'quotation', 'quoting', 'displayquote']).it(
+    'renders a %s environment',
+    function (environment) {
+      cy.get('@first-line').type(`\\begin{{}${environment}`)
+      cy.findAllByRole('listbox').should('have.length', 1)
+      cy.findByRole('listbox').contains(`\\begin{${environment}}`).click()
+      cy.get('@second-line').type('foo')
+      cy.get('.cm-content').should(
+        'have.text',
+        [`\\begin{${environment}}`, '    foo', `\\end{${environment}}`].join('')
+      )
+      cy.get('.cm-line').eq(4).click()
+      cy.get('.cm-content').should('have.text', '    foo')
+    }
+  )
 
   // TODO: \input
   // TODO: Math
   // TODO: Abstract
-  // TODO: Preamble
 })

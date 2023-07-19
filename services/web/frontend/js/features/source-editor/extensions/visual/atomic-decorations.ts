@@ -24,6 +24,7 @@ import { EndWidget } from './visual-widgets/end'
 import {
   getEnvironmentArguments,
   getEnvironmentName,
+  getUnstarredEnvironmentName,
   parseFigureData,
 } from '../../utils/tree-operations/environments'
 import { MathWidget } from './visual-widgets/math'
@@ -45,6 +46,17 @@ import { InlineGraphicsWidget } from './visual-widgets/inline-graphics'
 import getMeta from '../../../../utils/meta'
 import { EditableGraphicsWidget } from './visual-widgets/editable-graphics'
 import { EditableInlineGraphicsWidget } from './visual-widgets/editable-inline-graphics'
+import {
+  CloseBrace,
+  OpenBrace,
+  ShortTextArgument,
+  TextArgument,
+} from '../../lezer-latex/latex.terms.mjs'
+import { FootnoteWidget } from './visual-widgets/footnote'
+import { getListItems } from '../toolbar/lists'
+import { TildeWidget } from './visual-widgets/tilde'
+import { BeginTheoremWidget } from './visual-widgets/begin-theorem'
+import { parseTheoremArguments } from '../../utils/tree-operations/theorems'
 
 type Options = {
   fileTreeManager: {
@@ -109,6 +121,7 @@ const hasClosingBrace = (node: SyntaxNode) =>
   node.getChild('EnvNameGroup')?.getChild('CloseBrace')
 
 /**
+ * A state field that decorates ranges of text (including multiple lines) with Widget or Line decorations.
  * Atomic decorations replace a range of content with an uneditable widget.
  * Decorations that span multiple lines must be contained in a StateField, not a ViewPlugin.
  */
@@ -130,6 +143,15 @@ export const atomicDecorations = (options: Options) => {
 
     let listDepth = 0
 
+    const theoremEnvironments = new Map<string, string>([
+      ['theorem', 'Theorem'],
+      ['corollary', 'Corollary'],
+      ['lemma', 'lemma'],
+      ['proof', 'Proof'],
+    ])
+
+    let commandDefinitions = ''
+
     const preamble: {
       from: number
       to: number
@@ -137,11 +159,11 @@ export const atomicDecorations = (options: Options) => {
         node: SyntaxNode
         content: string
       }
-      author?: {
+      authors: {
         node: SyntaxNode
         content: string
-      }
-    } = { from: 0, to: 0 }
+      }[]
+    } = { from: 0, to: 0, authors: [] }
 
     // find the positions of the title and author in the preamble
     tree.iterate({
@@ -160,7 +182,7 @@ export const atomicDecorations = (options: Options) => {
           const node = nodeRef.node.getChild('TextArgument')
           if (node) {
             const content = state.sliceDoc(node.from, node.to)
-            preamble.author = { node, content }
+            preamble.authors.push({ node, content })
           }
         }
       },
@@ -221,98 +243,106 @@ export const atomicDecorations = (options: Options) => {
     tree.iterate({
       enter(nodeRef) {
         if (nodeRef.type.is('$Environment')) {
-          if (shouldDecorate(state, nodeRef)) {
-            const envName = getEnvironmentName(nodeRef.node, state)
-            const hideInEnvironmentTypes = ['figure', 'table']
-            if (envName && hideInEnvironmentTypes.includes(envName)) {
-              const beginNode = nodeRef.node.getChild('BeginEnv')
-              const endNode = nodeRef.node.getChild('EndEnv')
-              if (
-                beginNode &&
-                endNode &&
-                hasClosingBrace(beginNode) &&
-                hasClosingBrace(endNode)
-              ) {
-                const beginLine = state.doc.lineAt(beginNode.from)
-                const endLine = state.doc.lineAt(endNode.from)
+          const envName = getUnstarredEnvironmentName(nodeRef.node, state)
+          const hideInEnvironmentTypes = [
+            'figure',
+            'table',
+            'verbatim',
+            'lstlisting',
+            'quote',
+            'quotation',
+            'quoting',
+            'displayquote',
+          ]
+          if (envName && hideInEnvironmentTypes.includes(envName)) {
+            const beginNode = nodeRef.node.getChild('BeginEnv')
+            const endNode = nodeRef.node.getChild('EndEnv')
+            if (
+              beginNode &&
+              endNode &&
+              hasClosingBrace(beginNode) &&
+              hasClosingBrace(endNode)
+            ) {
+              const beginLine = state.doc.lineAt(beginNode.from)
+              const endLine = state.doc.lineAt(endNode.from)
 
-                const begin = {
-                  from: beginLine.from,
-                  to: extendForwardsOverEmptyLines(state.doc, beginLine),
-                }
-                const end = {
-                  from: extendBackwardsOverEmptyLines(state.doc, endLine),
-                  to: endLine.to,
-                }
+              const begin = {
+                from: beginLine.from,
+                to: extendForwardsOverEmptyLines(state.doc, beginLine),
+              }
+              const end = {
+                from: extendBackwardsOverEmptyLines(state.doc, endLine),
+                to: endLine.to,
+              }
 
-                if (shouldDecorate(state, { from: begin.from, to: end.to })) {
+              if (shouldDecorate(state, { from: begin.from, to: end.to })) {
+                decorations.push(
+                  Decoration.replace({
+                    widget: new EnvironmentLineWidget(envName, 'begin'),
+                    block: true,
+                  }).range(begin.from, begin.to),
+                  Decoration.replace({
+                    widget: new EnvironmentLineWidget(envName, 'end'),
+                    block: true,
+                  }).range(end.from, end.to)
+                )
+
+                const centeringNode = centeringNodeForEnvironment(nodeRef)
+
+                if (centeringNode) {
+                  const line = state.doc.lineAt(centeringNode.from)
+                  const from = extendBackwardsOverEmptyLines(state.doc, line)
+                  const to = extendForwardsOverEmptyLines(state.doc, line)
+
                   decorations.push(
                     Decoration.replace({
-                      widget: new EnvironmentLineWidget(envName, 'begin'),
                       block: true,
-                    }).range(begin.from, begin.to),
-                    Decoration.replace({
-                      widget: new EnvironmentLineWidget(envName, 'end'),
-                      block: true,
-                    }).range(end.from, end.to)
+                    }).range(from, to)
                   )
-
-                  const centeringNode = centeringNodeForEnvironment(nodeRef)
-
-                  if (centeringNode) {
-                    const line = state.doc.lineAt(centeringNode.from)
-                    const from = extendBackwardsOverEmptyLines(state.doc, line)
-                    const to = extendForwardsOverEmptyLines(state.doc, line)
-
-                    decorations.push(
-                      Decoration.replace({
-                        block: true,
-                      }).range(from, to)
-                    )
-                  }
                 }
               }
-            } else if (nodeRef.type.is('ListEnvironment')) {
-              const beginNode = nodeRef.node.getChild('BeginEnv')
-              const endNode = nodeRef.node.getChild('EndEnv')
+            }
+          } else if (nodeRef.type.is('ListEnvironment')) {
+            const beginNode = nodeRef.node.getChild('BeginEnv')
+            const endNode = nodeRef.node.getChild('EndEnv')
+
+            if (
+              beginNode &&
+              endNode &&
+              hasClosingBrace(beginNode) &&
+              hasClosingBrace(endNode)
+            ) {
+              const beginLine = state.doc.lineAt(beginNode.from)
+              const endLine = state.doc.lineAt(endNode.from)
+
+              const begin = {
+                from: beginLine.from,
+                to: extendForwardsOverEmptyLines(state.doc, beginLine),
+              }
+              const end = {
+                from: extendBackwardsOverEmptyLines(state.doc, endLine),
+                to: endLine.to,
+              }
 
               if (
-                beginNode &&
-                endNode &&
-                hasClosingBrace(beginNode) &&
-                hasClosingBrace(endNode)
+                !selectionIntersects(state.selection, begin) &&
+                !selectionIntersects(state.selection, end) &&
+                getListItems(nodeRef.node).length > 0 // not empty
               ) {
-                const beginLine = state.doc.lineAt(beginNode.from)
-                const endLine = state.doc.lineAt(endNode.from)
-
-                const begin = {
-                  from: beginLine.from,
-                  to: extendForwardsOverEmptyLines(state.doc, beginLine),
-                }
-                const end = {
-                  from: extendBackwardsOverEmptyLines(state.doc, endLine),
-                  to: endLine.to,
-                }
-
-                if (
-                  !selectionIntersects(state.selection, begin) &&
-                  !selectionIntersects(state.selection, end)
-                ) {
-                  decorations.push(
-                    Decoration.replace({
-                      block: true,
-                    }).range(begin.from, begin.to),
-                    Decoration.replace({
-                      block: true,
-                    }).range(end.from, end.to)
-                  )
-                }
+                decorations.push(
+                  Decoration.replace({
+                    block: true,
+                  }).range(begin.from, begin.to),
+                  Decoration.replace({
+                    block: true,
+                  }).range(end.from, end.to)
+                )
               }
             }
           }
         } else if (nodeRef.type.is('BeginEnv')) {
           // the beginning of an environment, with an environment name argument
-          const envName = getEnvironmentName(nodeRef.node, state)
+          const envName = getUnstarredEnvironmentName(nodeRef.node, state)
 
           if (envName) {
             switch (envName) {
@@ -388,7 +418,28 @@ export const atomicDecorations = (options: Options) => {
                 }
                 break
               default:
-                // do nothing
+                {
+                  const theoremName = theoremEnvironments.get(envName)
+
+                  if (theoremName && shouldDecorate(state, nodeRef)) {
+                    const argumentNode = nodeRef.node
+                      .getChild('OptionalArgument')
+                      ?.getChild('ShortOptionalArg')
+
+                    decorations.push(
+                      Decoration.replace({
+                        widget: new BeginTheoremWidget(
+                          envName,
+                          theoremName,
+                          argumentNode
+                        ),
+                        block: true,
+                      }).range(nodeRef.from, nodeRef.to)
+                    )
+                  }
+
+                  // do nothing
+                }
                 break
             }
           }
@@ -437,6 +488,16 @@ export const atomicDecorations = (options: Options) => {
                 }
                 break
               default:
+                if (theoremEnvironments.has(envName)) {
+                  if (shouldDecorate(state, nodeRef)) {
+                    decorations.push(
+                      Decoration.replace({
+                        widget: new EndWidget(),
+                        block: true,
+                      }).range(nodeRef.from, nodeRef.to)
+                    )
+                  }
+                }
                 // do nothing
                 break
             }
@@ -448,12 +509,16 @@ export const atomicDecorations = (options: Options) => {
             'SectioningCommand'
           )
           if (ancestorNode) {
-            const shouldShowBraces = !shouldDecorate(state, ancestorNode)
             // a section (or subsection, etc) command
             const argumentNode = ancestorNode.getChild('SectioningArgument')
             if (argumentNode) {
-              const braces = argumentNode.getChildren('$Brace')
-              if (braces.length !== 2) {
+              const openBrace = argumentNode.getChild(OpenBrace)
+              const closeBrace = argumentNode.getChild(CloseBrace)
+              if (!openBrace || !closeBrace) {
+                return false
+              }
+              const sectionCtrlSeqNode = ancestorNode.getChild('$CtrlSeq')
+              if (!sectionCtrlSeqNode) {
                 return false
               }
               const titleNode = argumentNode.getChild('LongArg')
@@ -465,17 +530,23 @@ export const atomicDecorations = (options: Options) => {
                 return false
               }
 
+              const showBraces =
+                selectionIntersects(state.selection, sectionCtrlSeqNode) ||
+                selectionIntersects(state.selection, openBrace) ||
+                selectionIntersects(state.selection, closeBrace)
+
               decorations.push(
                 Decoration.replace({
-                  widget: new BraceWidget(shouldShowBraces ? '}' : ''),
-                }).range(braces[1].from, braces[1].to)
+                  widget: new BraceWidget(showBraces ? '{' : ''),
+                }).range(nodeRef.from, titleNode.from)
               )
 
               decorations.push(
                 Decoration.replace({
-                  widget: new BraceWidget(shouldShowBraces ? '{' : ''),
-                }).range(nodeRef.from, titleNode.from)
+                  widget: new BraceWidget(showBraces ? '}' : ''),
+                }).range(closeBrace.from, closeBrace.to)
               )
+
               return false
             }
           }
@@ -501,6 +572,22 @@ export const atomicDecorations = (options: Options) => {
           }
 
           return false // no markup in verbatim content
+        } else if (
+          nodeRef.type.is('NewCommand') ||
+          nodeRef.type.is('RenewCommand')
+        ) {
+          const argumentNode = nodeRef.node.getChild('LiteralArgContent')
+          if (argumentNode) {
+            const argument = state
+              .sliceDoc(argumentNode.from, argumentNode.to)
+              .trim()
+            if (/^\\\w+/.test(argument)) {
+              const content = state.sliceDoc(nodeRef.from, nodeRef.to)
+              if (content) {
+                commandDefinitions += `${content}\n`
+              }
+            }
+          }
         } else if (nodeRef.type.is('Cite')) {
           // \cite command with a bibkey argument
           if (shouldDecorate(state, nodeRef)) {
@@ -646,13 +733,18 @@ export const atomicDecorations = (options: Options) => {
 
               decorations.push(
                 Decoration.replace({
-                  widget: new MathWidget(content, displayMode),
+                  widget: new MathWidget(
+                    content,
+                    displayMode,
+                    commandDefinitions
+                  ),
                   block: displayMode,
                 }).range(ancestorNode.from, ancestorNode.to)
               )
-              return false
             }
           }
+
+          return false // never decorate inside math
         } else if (nodeRef.type.is('HrefCommand')) {
           // a hyperlink with URL and content arguments
           if (shouldDecorate(state, nodeRef)) {
@@ -668,6 +760,15 @@ export const atomicDecorations = (options: Options) => {
                 )
               )
             }
+          }
+        } else if (nodeRef.type.is('Tilde')) {
+          // a tilde (non-breaking space)
+          if (shouldDecorate(state, nodeRef)) {
+            decorations.push(
+              Decoration.replace({
+                widget: new TildeWidget(),
+              }).range(nodeRef.from, nodeRef.to)
+            )
           }
         } else if (nodeRef.type.is('Caption')) {
           if (shouldDecorate(state, nodeRef)) {
@@ -788,6 +889,30 @@ export const atomicDecorations = (options: Options) => {
             )
             return false
           }
+        } else if (nodeRef.type.is('NewTheoremCommand')) {
+          const result = parseTheoremArguments(state, nodeRef.node)
+          if (result) {
+            const { name, label } = result
+            theoremEnvironments.set(name, label)
+          }
+        } else if (
+          nodeRef.type.is('TextColorCommand') ||
+          nodeRef.type.is('ColorBoxCommand')
+        ) {
+          if (shouldDecorate(state, nodeRef)) {
+            const colorArgumentNode = nodeRef.node.getChild(ShortTextArgument)
+            const contentArgumentNode = nodeRef.node.getChild(TextArgument)
+            if (colorArgumentNode && contentArgumentNode) {
+              // command name and opening brace
+              decorations.push(
+                ...decorateArgumentBraces(
+                  new BraceWidget(),
+                  contentArgumentNode,
+                  nodeRef.from
+                )
+              )
+            }
+          }
         } else if (nodeRef.type.is('UnknownCommand')) {
           // a command that's not defined separately by the grammar
           const commandNode = nodeRef.node
@@ -819,9 +944,14 @@ export const atomicDecorations = (options: Options) => {
                 )
               } else if (
                 // markup that can't be toggled using toolbar buttons/keyboard shortcuts
-                ['\\textsc', '\\texttt', '\\sout', '\\emph'].includes(
-                  commandName
-                )
+                [
+                  '\\textsc',
+                  '\\texttt',
+                  '\\textmd',
+                  '\\textsf',
+                  '\\sout',
+                  '\\emph',
+                ].includes(commandName)
               ) {
                 if (shouldDecorate(state, nodeRef)) {
                   decorations.push(
@@ -843,6 +973,43 @@ export const atomicDecorations = (options: Options) => {
                     )
                   )
                   return false
+                }
+              } else if (
+                commandName === '\\footnote' ||
+                commandName === '\\endnote'
+              ) {
+                if (textArgumentNode) {
+                  if (
+                    state.readOnly &&
+                    selectionIntersects(state.selection, nodeRef)
+                  ) {
+                    // a special case for a read-only document:
+                    // always display the content, styled differently from the main content.
+                    decorations.push(
+                      ...decorateArgumentBraces(
+                        new BraceWidget(),
+                        textArgumentNode,
+                        nodeRef.from
+                      ),
+                      Decoration.mark({
+                        class: 'ol-cm-footnote ol-cm-footnote-view',
+                      }).range(textArgumentNode.from, textArgumentNode.to)
+                    )
+                  } else {
+                    if (shouldDecorate(state, nodeRef)) {
+                      // collapse the footnote when the selection is outside it
+                      decorations.push(
+                        Decoration.replace({
+                          widget: new FootnoteWidget(
+                            commandName === '\\footnote'
+                              ? 'footnote'
+                              : 'endnote'
+                          ),
+                        }).range(nodeRef.from, nodeRef.to)
+                      )
+                      return false
+                    }
+                  }
                 }
               } else if (commandName === '\\LaTeX') {
                 if (shouldDecorate(state, nodeRef)) {
@@ -884,19 +1051,19 @@ export const atomicDecorations = (options: Options) => {
     return Decoration.set(decorations, true)
   }
 
-  let previousTree: Tree
-
   return [
     StateField.define<{
       mousedown: boolean
       decorations: DecorationSet
+      previousTree: Tree
     }>({
       create(state) {
-        previousTree = syntaxTree(state)
+        const previousTree = syntaxTree(state)
 
         return {
           mousedown: false,
           decorations: createDecorations(state, previousTree),
+          previousTree,
         }
       },
       update(value, tr) {
@@ -904,33 +1071,35 @@ export const atomicDecorations = (options: Options) => {
           // store the "mousedown" value when it changes
           if (effect.is(mouseDownEffect)) {
             value = {
+              ...value,
               mousedown: effect.value,
-              decorations: value.decorations, // unchanged
             }
           }
         }
 
         const tree = syntaxTree(tr.state)
         if (
-          tree.type === previousTree.type &&
+          tree.type === value.previousTree.type &&
           tree.length < tr.state.doc.length
         ) {
           // still parsing
           value = {
-            mousedown: value.mousedown, // unchanged
+            ...value,
             decorations: value.decorations.map(tr.changes),
           }
         } else if (
           // only update the decorations when the mouse is not making a selection
           !value.mousedown &&
-          (tree !== previousTree || tr.selection || hasMouseDownEffect(tr))
+          (tree !== value.previousTree ||
+            tr.selection ||
+            hasMouseDownEffect(tr))
         ) {
           // tree changed
-          previousTree = tree
           // TODO: update the existing decorations for the changed range(s)?
           value = {
-            mousedown: value.mousedown, // unchanged
+            ...value,
             decorations: createDecorations(tr.state, tree),
+            previousTree: tree,
           }
         }
 

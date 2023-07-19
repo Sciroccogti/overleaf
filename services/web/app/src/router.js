@@ -12,6 +12,7 @@ const UploadsRouter = require('./Features/Uploads/UploadsRouter')
 const metrics = require('@overleaf/metrics')
 const ReferalController = require('./Features/Referal/ReferalController')
 const AuthenticationController = require('./Features/Authentication/AuthenticationController')
+const PermissionsController = require('./Features/Authorization/PermissionsController')
 const SessionManager = require('./Features/Authentication/SessionManager')
 const TagsController = require('./Features/Tags/TagsController')
 const NotificationsController = require('./Features/Notifications/NotificationsController')
@@ -67,7 +68,6 @@ const logger = require('@overleaf/logger')
 const _ = require('underscore')
 const { plainTextResponse } = require('./infrastructure/Response')
 const PublicAccessLevels = require('./Features/Authorization/PublicAccessLevels')
-const UserContentDomainController = require('./Features/UserContentDomainCheck/UserContentDomainController')
 
 const rateLimiters = {
   addEmail: new RateLimiter('add-email', {
@@ -201,21 +201,6 @@ const rateLimiters = {
     points: 10,
     duration: 60,
   }),
-  userContentDomainAccessCheckResult: new RateLimiter(
-    'user-content-domain-a-c-r',
-    {
-      points: 30,
-      duration: 60,
-    }
-  ),
-  userContentDomainFallbackUsage: new RateLimiter('user-content-fb-u', {
-    points: 15,
-    duration: 60,
-  }),
-  userContentDomainMaxAccessChecksHit: new RateLimiter('user-content-mach', {
-    points: 15,
-    duration: 60,
-  }),
 }
 
 function initialize(webRouter, privateApiRouter, publicApiRouter) {
@@ -302,6 +287,7 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
   webRouter.get(
     '/user/settings',
     AuthenticationController.requireLogin(),
+    PermissionsController.useCapabilities(),
     UserPagesController.settingsPage
   )
   webRouter.post(
@@ -318,6 +304,7 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
   webRouter.get(
     '/user/emails',
     AuthenticationController.requireLogin(),
+    PermissionsController.useCapabilities(),
     UserController.promises.ensureAffiliationMiddleware,
     UserEmailsController.list
   )
@@ -350,7 +337,9 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
     webRouter.post(
       '/user/emails',
       AuthenticationController.requireLogin(),
+      PermissionsController.requirePermission('add-secondary-email'),
       RateLimiterMiddleware.rateLimit(rateLimiters.addEmail),
+      CaptchaMiddleware.validateCaptcha('addEmail'),
       UserEmailsController.add
     )
     webRouter.post(
@@ -367,6 +356,7 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
     webRouter.post(
       '/user/emails/endorse',
       AuthenticationController.requireLogin(),
+      PermissionsController.requirePermission('endorse-email'),
       RateLimiterMiddleware.rateLimit(rateLimiters.endorseEmail),
       UserEmailsController.endorse
     )
@@ -412,6 +402,7 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
     '/user/delete',
     RateLimiterMiddleware.rateLimit(rateLimiters.deleteUser),
     AuthenticationController.requireLogin(),
+    PermissionsController.requirePermission('delete-own-account'),
     UserController.tryDeleteUser
   )
 
@@ -713,34 +704,29 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
     '/project/:Project_id/updates',
     AuthorizationMiddleware.blockRestrictedUserFromProject,
     AuthorizationMiddleware.ensureUserCanReadProject,
-    HistoryController.selectHistoryApi,
     HistoryController.proxyToHistoryApiAndInjectUserDetails
   )
   webRouter.get(
     '/project/:Project_id/doc/:doc_id/diff',
     AuthorizationMiddleware.blockRestrictedUserFromProject,
     AuthorizationMiddleware.ensureUserCanReadProject,
-    HistoryController.selectHistoryApi,
     HistoryController.proxyToHistoryApi
   )
   webRouter.get(
     '/project/:Project_id/diff',
     AuthorizationMiddleware.blockRestrictedUserFromProject,
     AuthorizationMiddleware.ensureUserCanReadProject,
-    HistoryController.selectHistoryApi,
     HistoryController.proxyToHistoryApiAndInjectUserDetails
   )
   webRouter.get(
     '/project/:Project_id/filetree/diff',
     AuthorizationMiddleware.blockRestrictedUserFromProject,
     AuthorizationMiddleware.ensureUserCanReadProject,
-    HistoryController.selectHistoryApi,
     HistoryController.proxyToHistoryApi
   )
   webRouter.post(
     '/project/:Project_id/doc/:doc_id/version/:version_id/restore',
     AuthorizationMiddleware.ensureUserCanWriteProjectContent,
-    HistoryController.selectHistoryApi,
     HistoryController.proxyToHistoryApi
   )
   webRouter.post(
@@ -770,22 +756,16 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
     '/project/:Project_id/labels',
     AuthorizationMiddleware.blockRestrictedUserFromProject,
     AuthorizationMiddleware.ensureUserCanReadProject,
-    HistoryController.selectHistoryApi,
-    HistoryController.ensureProjectHistoryEnabled,
     HistoryController.getLabels
   )
   webRouter.post(
     '/project/:Project_id/labels',
     AuthorizationMiddleware.ensureUserCanWriteProjectContent,
-    HistoryController.selectHistoryApi,
-    HistoryController.ensureProjectHistoryEnabled,
     HistoryController.createLabel
   )
   webRouter.delete(
     '/project/:Project_id/labels/:label_id',
     AuthorizationMiddleware.ensureUserCanWriteProjectContent,
-    HistoryController.selectHistoryApi,
-    HistoryController.ensureProjectHistoryEnabled,
     HistoryController.deleteLabel
   )
 
@@ -1346,18 +1326,18 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
     AuthorizationMiddleware.ensureUserCanReadProject,
     function (req, res) {
       const projectId = req.params.Project_id
+      // use a valid user id for testing
+      const testUserId = '123456789012345678901234'
       const sendRes = _.once(function (statusCode, message) {
         res.status(statusCode)
         plainTextResponse(res, message)
-        ClsiCookieManager.clearServerId(projectId)
+        ClsiCookieManager.clearServerId(projectId, testUserId, () => {})
       }) // force every compile to a new server
       // set a timeout
       let handler = setTimeout(function () {
         sendRes(500, 'Compiler timed out')
         handler = null
       }, 10000)
-      // use a valid user id for testing
-      const testUserId = '123456789012345678901234'
       // run the compile
       CompileManager.compile(
         projectId,
@@ -1409,35 +1389,6 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
     metrics.inc('client-side-error')
     res.sendStatus(204)
   })
-
-  webRouter.post(
-    '/record-user-content-domain-access-check-result',
-    validate({
-      body: Joi.object({
-        failed: Joi.number().min(0).max(6),
-        succeeded: Joi.number().min(0).max(6),
-        isOldDomain: Joi.boolean().default(false),
-      }),
-    }),
-    RateLimiterMiddleware.rateLimit(
-      rateLimiters.userContentDomainAccessCheckResult
-    ),
-    UserContentDomainController.recordCheckResult
-  )
-  webRouter.post(
-    '/record-user-content-domain-fallback-usage',
-    RateLimiterMiddleware.rateLimit(
-      rateLimiters.userContentDomainFallbackUsage
-    ),
-    UserContentDomainController.recordFallbackUsage
-  )
-  webRouter.post(
-    '/record-user-content-domain-max-access-checks-hit',
-    RateLimiterMiddleware.rateLimit(
-      rateLimiters.userContentDomainMaxAccessChecksHit
-    ),
-    UserContentDomainController.recordMaxAccessChecksHit
-  )
 
   webRouter.get(
     `/read/:token(${TokenAccessController.READ_ONLY_TOKEN_PATTERN})`,

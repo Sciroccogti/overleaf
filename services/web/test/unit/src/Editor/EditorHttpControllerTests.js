@@ -25,11 +25,13 @@ describe('EditorHttpController', function () {
         other_property: true,
       },
       members: [{ one: 1 }, { two: 2 }],
+      invites: [{ three: 3 }, { four: 4 }],
     }
     this.reducedProjectView = {
       _id: this.projectView._id,
       owner: { _id: this.projectView.owner._id },
       members: [],
+      invites: [],
     }
     this.doc = { _id: new ObjectId(), name: 'excellent-original-idea.tex' }
     this.file = { _id: new ObjectId() }
@@ -111,7 +113,6 @@ describe('EditorHttpController', function () {
     this.Metrics = { inc: sinon.stub() }
     this.TokenAccessHandler = {
       getRequestToken: sinon.stub().returns(this.token),
-      protectTokens: sinon.stub(),
     }
     this.SessionManager = {
       getLoggedInUserId: sinon.stub().returns(this.user._id),

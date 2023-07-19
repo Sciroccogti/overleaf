@@ -142,9 +142,17 @@ class ThirdPartyUserNotFoundError extends BackwardCompatibleError {
   }
 }
 
+class OutputFileFetchFailedError extends OError {}
+
 class SubscriptionAdminDeletionError extends OErrorV2CompatibleError {
   constructor(options) {
     super('subscription admins cannot be deleted', options)
+  }
+}
+
+class SubscriptionNotFoundError extends OErrorV2CompatibleError {
+  constructor(options) {
+    super('subscription not found', options)
   }
 }
 
@@ -204,6 +212,7 @@ module.exports = {
   EmailExistsError,
   InvalidError,
   NotInV2Error,
+  OutputFileFetchFailedError,
   SAMLIdentityExistsError,
   SAMLAlreadyLinkedError,
   SAMLEmailNotAffiliatedError,
@@ -213,6 +222,7 @@ module.exports = {
   ThirdPartyIdentityExistsError,
   ThirdPartyUserNotFoundError,
   SubscriptionAdminDeletionError,
+  SubscriptionNotFoundError,
   ProjectNotFoundError,
   UserNotFoundError,
   UserNotCollaboratorError,

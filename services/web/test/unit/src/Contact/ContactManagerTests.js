@@ -1,158 +1,103 @@
-/* eslint-disable
-    max-len,
-    no-return-assign,
-*/
-// TODO: This file was created by bulk-decaffeinate.
-// Fix any style issues and re-enable lint.
-/*
- * decaffeinate suggestions:
- * DS102: Remove unnecessary code created because of implicit returns
- * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
- */
+const { expect } = require('chai')
 const sinon = require('sinon')
 const modulePath = '../../../../app/src/Features/Contacts/ContactManager'
 const SandboxedModule = require('sandboxed-module')
 
 describe('ContactManager', function () {
   beforeEach(function () {
+    this.user_id = 'user-id-123'
+    this.contact_id = 'contact-id-123'
+    this.contact_ids = ['mock', 'contact_ids']
+    this.FetchUtils = {
+      fetchJson: sinon.stub(),
+    }
     this.ContactManager = SandboxedModule.require(modulePath, {
       requires: {
-        request: (this.request = sinon.stub()),
+        '@overleaf/fetch-utils': this.FetchUtils,
         '@overleaf/settings': (this.settings = {
           apis: {
             contacts: {
-              url: 'contacts.sharelatex.com',
+              url: 'http://contacts.sharelatex.com',
             },
           },
         }),
       },
     })
-
-    this.user_id = 'user-id-123'
-    this.contact_id = 'contact-id-123'
-    return (this.callback = sinon.stub())
   })
 
   describe('getContacts', function () {
     describe('with a successful response code', function () {
-      beforeEach(function () {
-        this.request.get = sinon
-          .stub()
-          .callsArgWith(
-            1,
-            null,
-            { statusCode: 204 },
-            { contact_ids: (this.contact_ids = ['mock', 'contact_ids']) }
-          )
-        return this.ContactManager.getContactIds(
+      beforeEach(async function () {
+        this.FetchUtils.fetchJson.resolves({ contact_ids: this.contact_ids })
+
+        this.result = await this.ContactManager.promises.getContactIds(
           this.user_id,
-          { limit: 42 },
-          this.callback
+          { limit: 42 }
         )
       })
 
       it('should get the contacts from the contacts api', function () {
-        return this.request.get
-          .calledWith({
-            url: `${this.settings.apis.contacts.url}/user/${this.user_id}/contacts`,
-            qs: { limit: 42 },
-            json: true,
-            jar: false,
-          })
-          .should.equal(true)
-      })
-
-      it('should call the callback with the contatcs', function () {
-        return this.callback
-          .calledWith(null, this.contact_ids)
-          .should.equal(true)
-      })
-    })
-
-    describe('with a failed response code', function () {
-      beforeEach(function () {
-        this.request.get = sinon
-          .stub()
-          .callsArgWith(1, null, { statusCode: 500 }, null)
-        return this.ContactManager.getContactIds(
-          this.user_id,
-          { limit: 42 },
-          this.callback
+        this.FetchUtils.fetchJson.should.have.been.calledWithMatch(
+          sinon.match(
+            url =>
+              url.toString() ===
+              `${this.settings.apis.contacts.url}/user/${this.user_id}/contacts?limit=42`
+          )
         )
       })
 
-      it('should call the callback with an error', function () {
-        return this.callback
-          .calledWith(
-            sinon.match
-              .instanceOf(Error)
-              .and(
-                sinon.match.has(
-                  'message',
-                  'contacts api responded with non-success code: 500'
-                )
-              )
-          )
-          .should.equal(true)
+      it('should return the contacts', function () {
+        this.result.should.equal(this.contact_ids)
+      })
+    })
+
+    describe('when an error occurs', function () {
+      beforeEach(async function () {
+        this.response = {
+          ok: false,
+          statusCode: 500,
+          json: sinon.stub().resolves({ contact_ids: this.contact_ids }),
+        }
+        this.FetchUtils.fetchJson.rejects(new Error('request error'))
+      })
+
+      it('should reject the promise', async function () {
+        await expect(
+          this.ContactManager.promises.getContactIds(this.user_id, {
+            limit: 42,
+          })
+        ).to.be.rejected
       })
     })
   })
 
   describe('addContact', function () {
     describe('with a successful response code', function () {
-      beforeEach(function () {
-        this.request.post = sinon
-          .stub()
-          .callsArgWith(1, null, { statusCode: 200 }, null)
-        return this.ContactManager.addContact(
+      beforeEach(async function () {
+        this.FetchUtils.fetchJson.resolves({ contact_ids: this.contact_ids })
+
+        this.result = await this.ContactManager.promises.addContact(
           this.user_id,
-          this.contact_id,
-          this.callback
+          this.contact_id
         )
       })
 
       it('should add the contacts for the user in the contacts api', function () {
-        return this.request.post
-          .calledWith({
-            url: `${this.settings.apis.contacts.url}/user/${this.user_id}/contacts`,
-            json: {
-              contact_id: this.contact_id,
-            },
-            jar: false,
+        this.FetchUtils.fetchJson.should.have.been.calledWithMatch(
+          sinon.match(
+            url =>
+              url.toString() ===
+              `${this.settings.apis.contacts.url}/user/${this.user_id}/contacts`
+          ),
+          sinon.match({
+            method: 'POST',
+            json: { contact_id: this.contact_id },
           })
-          .should.equal(true)
-      })
-
-      it('should call the callback', function () {
-        return this.callback.called.should.equal(true)
-      })
-    })
-
-    describe('with a failed response code', function () {
-      beforeEach(function () {
-        this.request.post = sinon
-          .stub()
-          .callsArgWith(1, null, { statusCode: 500 }, null)
-        return this.ContactManager.addContact(
-          this.user_id,
-          this.contact_id,
-          this.callback
         )
       })
 
-      it('should call the callback with an error', function () {
-        return this.callback
-          .calledWith(
-            sinon.match
-              .instanceOf(Error)
-              .and(
-                sinon.match.has(
-                  'message',
-                  'contacts api responded with non-success code: 500'
-                )
-              )
-          )
-          .should.equal(true)
+      it('should call the callback', function () {
+        this.result.should.equal(this.contact_ids)
       })
     })
   })

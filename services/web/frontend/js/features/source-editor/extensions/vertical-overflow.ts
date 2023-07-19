@@ -13,6 +13,11 @@ import {
   WidgetType,
 } from '@codemirror/view'
 
+/**
+ * A custom extension which stores values for padding needed
+ * a) at the top and bottom of the editor, to match the height of the review panel, and
+ * b) at the bottom of the editor content, so the last line of the document can be scrolled to the top of the editor.
+ */
 export function verticalOverflow(): Extension {
   return [
     overflowPaddingState,
@@ -142,14 +147,18 @@ const bottomPaddingPlugin = ViewPlugin.define(view => {
   }
 })
 
-const topPaddingFacet = Facet.define<number>()
-const topPadding = topPaddingFacet.compute([overflowPaddingState], state => {
-  return state.field(overflowPaddingState).top
+const topPaddingFacet = Facet.define<number, number>({
+  combine(values) {
+    return Math.max(0, ...values)
+  },
+})
+const topPadding = topPaddingFacet.from(overflowPaddingState, state => {
+  return state.top
 })
 
-const bottomPaddingFacet = Facet.define<number>({
+const bottomPaddingFacet = Facet.define<number, number>({
   combine(values) {
-    return [Math.max(...values)]
+    return Math.max(0, ...values)
   },
 })
 const bottomPadding = bottomPaddingFacet.computeN(
@@ -167,7 +176,7 @@ const bottomPadding = bottomPaddingFacet.computeN(
 const contentAttributes = EditorView.contentAttributes.compute(
   [bottomPaddingFacet],
   state => {
-    const [bottom] = state.facet(bottomPaddingFacet)
+    const bottom = state.facet(bottomPaddingFacet)
     const style = `padding-bottom: ${bottom}px;`
     return { style }
   }
@@ -193,8 +202,9 @@ class TopPaddingWidget extends WidgetType {
     return this.height === widget.height
   }
 
-  updateDOM(element: HTMLElement): boolean {
+  updateDOM(element: HTMLElement, view: EditorView): boolean {
     element.style.height = this.height + 'px'
+    view.requestMeasure()
     return true
   }
 }
@@ -202,7 +212,7 @@ class TopPaddingWidget extends WidgetType {
 const topPaddingDecoration = EditorView.decorations.compute(
   [topPaddingFacet],
   state => {
-    const [top] = state.facet(topPaddingFacet)
+    const top = state.facet(topPaddingFacet)
 
     return Decoration.set([
       Decoration.widget({

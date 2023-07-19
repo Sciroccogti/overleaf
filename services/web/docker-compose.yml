@@ -6,7 +6,7 @@ volumes:
 services:
 
   test_unit:
-    image: node:16.17.1
+    image: node:16.20.1
     volumes:
       - .:/overleaf/services/web
       - ../../node_modules:/overleaf/node_modules
@@ -21,7 +21,7 @@ services:
     user: node
 
   test_acceptance:
-    image: node:16.17.1
+    image: node:16.20.1
     volumes:
       - .:/overleaf/services/web
       - ../../node_modules:/overleaf/node_modules
@@ -76,7 +76,7 @@ services:
     user: node
 
   test_frontend_ct:
-    image: cypress/included:12.12.0
+    image: cypress/included:12.11.0
     volumes:
       - ../../:/overleaf
     working_dir: /overleaf/services/web

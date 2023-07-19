@@ -22,7 +22,6 @@ import LoadingManager from './ide/LoadingManager'
 import ConnectionManager from './ide/connection/ConnectionManager'
 import EditorManager from './ide/editor/EditorManager'
 import OnlineUsersManager from './ide/online-users/OnlineUsersManager'
-import HistoryManager from './ide/history/HistoryManager'
 import HistoryV2Manager from './ide/history/HistoryV2Manager'
 import PermissionsManager from './ide/permissions/PermissionsManager'
 import BinaryFilesManager from './ide/binary-files/BinaryFilesManager'
@@ -43,7 +42,6 @@ import './ide/directives/validFile'
 import './ide/directives/verticalResizablePanes'
 import './ide/services/ide'
 import './directives/focus'
-import './directives/fineUpload'
 import './directives/scroll'
 import './directives/onEnter'
 import './directives/stopPropagation'
@@ -69,13 +67,11 @@ import './features/source-editor/controllers/cm6-switch-away-survey-controller'
 import './features/source-editor/controllers/grammarly-warning-controller'
 import './features/source-editor/controllers/legacy-editor-warning-controller'
 import './features/outline/controllers/documentation-button-controller'
-import './features/onboarding/controllers/onboarding-video-tour-modal-controller'
 import './features/history/controllers/history-controller'
 import './features/history/controllers/history-file-tree-controller'
 import { cleanupServiceWorker } from './utils/service-worker-cleanup'
 import { reportCM6Perf } from './infrastructure/cm6-performance'
 import { reportAcePerf } from './ide/editor/ace-performance'
-import { scheduleUserContentDomainAccessCheck } from './features/user-content-domain-access-check'
 
 App.controller(
   'IdeController',
@@ -213,11 +209,7 @@ App.controller(
       eventTracking
     )
     ide.onlineUsersManager = new OnlineUsersManager(ide, $scope)
-    if (window.data.useV2History) {
-      ide.historyManager = new HistoryV2Manager(ide, $scope, localStorage)
-    } else {
-      ide.historyManager = new HistoryManager(ide, $scope)
-    }
+    ide.historyManager = new HistoryV2Manager(ide, $scope, localStorage)
     ide.permissionsManager = new PermissionsManager(ide, $scope)
     ide.binaryFilesManager = new BinaryFilesManager(ide, $scope)
     ide.metadataManager = new MetadataManager(ide, $scope, metadata)
@@ -493,7 +485,6 @@ If the project has been renamed please look in your project list for a new proje
 )
 
 cleanupServiceWorker()
-scheduleUserContentDomainAccessCheck()
 
 angular.module('SharelatexApp').config(function ($provide) {
   $provide.decorator('$browser', [
