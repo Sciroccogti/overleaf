@@ -127,6 +127,9 @@ nav.navbar.navbar-default.navbar-main
 
 					// logged out
 					if !getSessionUser()
+						// TODO: templates link
+						li
+							a(href="https://latex.ustc.edu.cn/template") #{translate('Templates')}
 						// register link
 						if hasFeature('registration-page')
 							li
@@ -152,6 +155,9 @@ nav.navbar.navbar-default.navbar-main
 
 					// projects link and account menu
 					if getSessionUser()
+						// TODO: templates link
+						li
+							a(href="https://latex.ustc.edu.cn/template") #{translate('Templates')}
 						li
 							a(href="/project") #{translate('Projects')}
 						li.dropdown
