@@ -817,8 +817,8 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
     AuthorizationMiddleware.ensureUserCanReadProject,
     Settings.allowAnonymousReadAndWriteSharing
       ? (req, res, next) => {
-          next()
-        }
+        next()
+      }
       : AuthenticationController.requireLogin(),
     MetaController.getMetadata
   )
@@ -827,8 +827,8 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
     AuthorizationMiddleware.ensureUserCanReadProject,
     Settings.allowAnonymousReadAndWriteSharing
       ? (req, res, next) => {
-          next()
-        }
+        next()
+      }
       : AuthenticationController.requireLogin(),
     MetaController.broadcastMetadataForDoc
   )
@@ -1093,6 +1093,58 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
     ChatController.sendMessage
   )
 
+  // review apis
+  webRouter.get(
+    '/project/:project_id/threads',
+    AuthorizationMiddleware.blockRestrictedUserFromProject,
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    ChatController.getThreads
+  )
+
+  webRouter.post(
+    '/project/:project_id/thread/:thread_id/messages',
+    AuthorizationMiddleware.blockRestrictedUserFromProject,
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    ChatController.sendComment
+  )
+
+  webRouter.post(
+    '/project/:project_id/thread/:thread_id/resolve',
+    AuthorizationMiddleware.blockRestrictedUserFromProject,
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    ChatController.resolveThread
+  )
+
+  webRouter.post(
+    '/project/:project_id/thread/:thread_id/reopen',
+    AuthorizationMiddleware.blockRestrictedUserFromProject,
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    ChatController.reopenThread
+  )
+
+  webRouter.post(
+    '/project/:project_id/thread/:thread_id/messages/:message_id/edit',
+    AuthorizationMiddleware.blockRestrictedUserFromProject,
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    ChatController.editMessage
+  )
+
+  webRouter.delete(
+    '/project/:project_id/thread/:thread_id/messages/:message_id',
+    AuthorizationMiddleware.blockRestrictedUserFromProject,
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    ChatController.deleteMessage
+  )
+
+  webRouter.delete(
+    '/project/:project_id/thread/:thread_id',
+    AuthorizationMiddleware.blockRestrictedUserFromProject,
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    ChatController.deleteThread
+  )
+
+  //review apis end
+
   webRouter.post(
     '/project/:Project_id/references/index',
     AuthorizationMiddleware.ensureUserCanReadProject,
@@ -1275,7 +1327,7 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
       const sendRes = _.once(function (statusCode, message) {
         res.status(statusCode)
         plainTextResponse(res, message)
-        ClsiCookieManager.clearServerId(projectId, () => {})
+        ClsiCookieManager.clearServerId(projectId, () => { })
       }) // force every compile to a new server
       // set a timeout
       let handler = setTimeout(function () {
