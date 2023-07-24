@@ -88,6 +88,7 @@ ENV ADMIN_PRIVILEGE_AVAILABLE "true"
 ENV SHARELATEX_APP_NAME "Overleaf Community Edition"
 
 ENV OPTIMISE_PDF "true"
+ENV PATH="/usr/local/texlive/2022/bin/x86_64-linux:${PATH}"
 
 # Phusion Image timeouts before sending SIGKILL to processes
 # ----------------------------------------------------------

@@ -245,6 +245,9 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
     AuthenticationController.passportLogin
   )
 
+  webRouter.get("/caslogin", UserPagesController.casloginPage)
+  AuthenticationController.addEndpointToLoginWhitelist('/caslogin')
+
   if (Settings.enableLegacyLogin) {
     AuthenticationController.addEndpointToLoginWhitelist('/login/legacy')
     webRouter.get('/login/legacy', UserPagesController.loginPage)

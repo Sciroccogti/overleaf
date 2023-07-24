@@ -9,6 +9,18 @@ const NewsletterManager = require('../Newsletter/NewsletterManager')
 const _ = require('lodash')
 const { expressify } = require('../../util/promises')
 const Features = require('../../infrastructure/Features')
+const { User } = require('../../models/User')
+const { registerNewUser, _registrationRequestIsValid } = require('./UserRegistrationHandler')
+const EmailHelper = require('../Helpers/EmailHelper')
+const UserCreater = require('./UserCreator')
+const AuthenticationManager = require('../Authentication/AuthenticationManager')
+
+const crypto = require('crypto')
+
+var http = require('http');
+var https = require('https');
+var url = require('url');
+const xml2js = require('xml2js')
 
 async function settingsPage(req, res) {
   const userId = SessionManager.getLoggedInUserId(req.session)
@@ -160,6 +172,111 @@ const UserPagesController = {
     }
     res.render('user/login', {
       title: 'login',
+    })
+  },
+
+  casloginPage(req, res, next) {
+    // if user is being sent to /login with explicit redirect (redir=/foo),
+    // such as being sent from the editor to /login, then set the redirect explicitly
+    if (
+      req.query.redir != null &&
+      AuthenticationController._getRedirectFromSession(req) == null
+    ) {
+      AuthenticationController.setRedirectInSession(req, req.query.redir)
+    }
+
+    let cas_validate = Settings.casURL + "serviceValidate"
+    let cas_login = Settings.casURL + "login"
+    let service_str = Settings.serviceURL
+
+    let ticket = req.query.ticket
+    if (ticket == null) {
+      let queryPath = new URL(cas_login)
+      queryPath.searchParams.append("service", service_str)
+      res.redirect(queryPath.toString())
+      return
+    }
+
+    let queryPath = new URL(cas_validate)
+    queryPath.searchParams.append("service", service_str)
+    queryPath.searchParams.append("ticket", ticket)
+
+    https.get(queryPath, (qres) => {
+      var html = ""
+      qres.on("data", (data) => {
+        html += data
+      })
+
+      qres.on("end", () => {
+        var parser = new xml2js.Parser();
+        console.log(html)
+        parser.parseString(html, (error, result) => {
+          if (error) {
+            console.log(error)
+            res.status(500).json({ "message": "failed to validate user#L216" })
+            return
+          }
+
+          console.log(result)
+          try {
+            var email = result["cas:serviceResponse"]
+            email = email["cas:authenticationSuccess"][0]
+            email = email["cas:attributes"][0]
+            email = email["cas:email"][0]
+          } catch (e) {
+            console.log(e)
+            res.status(500).json({
+              "message": "failed to validate user#L228",
+              "result": result,
+              "error": e
+            })
+            return
+          }
+
+          var email = EmailHelper.parseEmail(email)
+
+          User.findOne({ "email": email }, function (error, user) {
+            if (error) {
+              console.log(error)
+              res.status(500).json({ "message": "failed to validate user#L237" })
+            }
+
+            console.log("debug", user)
+
+            if (user == null) {
+              // register
+              UserCreater.createNewUser({ "email": email, "holdingAccount": false, }, (error, new_user) => {
+                if (error) {
+                  console.log(e)
+                  res.status(500).json({ "message": "create user failed" })
+                  return
+                }
+                user = new_user
+                console.log("user register", new_user)
+
+                NewsletterManager.subscribe(user, error => {
+                  if (error) {
+                    logger.warn(
+                      { err: error, user },
+                      'Failed to subscribe user to newsletter'
+                    )
+                  }
+                })
+
+                AuthenticationController.setAuditInfo(req, { method: 'CAS register' })
+                AuthenticationController.finishLogin(user, req, res, next)
+              })
+            } else {
+              console.log("user login", user)
+              AuthenticationController.setAuditInfo(req, { method: 'CAS login' })
+              AuthenticationController.finishLogin(user, req, res, next)
+            }
+          })
+        })
+      })
+    }).on('error', (e) => {
+      console.log(e)
+      res.status(500).json({ "message": "failed to validate user#L275" })
     })
   },
 

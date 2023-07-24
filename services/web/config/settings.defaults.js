@@ -169,18 +169,16 @@ module.exports = {
   // options incase you want to run some services on remote hosts.
   apis: {
     web: {
-      url: `http://${
-        process.env.WEB_API_HOST || process.env.WEB_HOST || 'localhost'
-      }:${process.env.WEB_API_PORT || process.env.WEB_PORT || 3000}`,
+      url: `http://${process.env.WEB_API_HOST || process.env.WEB_HOST || 'localhost'
+        }:${process.env.WEB_API_PORT || process.env.WEB_PORT || 3000}`,
       user: httpAuthUser,
       pass: httpAuthPass,
     },
     documentupdater: {
-      url: `http://${
-        process.env.DOCUPDATER_HOST ||
+      url: `http://${process.env.DOCUPDATER_HOST ||
         process.env.DOCUMENT_UPDATER_HOST ||
         'localhost'
-      }:3003`,
+        }:3003`,
     },
     spelling: {
       url: `http://${process.env.SPELLING_HOST || 'localhost'}:3005`,
@@ -534,6 +532,9 @@ module.exports = {
   // Should we allow access to any page without logging in? This includes
   // public projects, /learn, /templates, about pages, etc.
   allowPublicAccess: process.env.SHARELATEX_ALLOW_PUBLIC_ACCESS === 'true',
+
+  casURL: process.env.CASURL,
+  serviceURL: process.env.SERVICE_URL,
 
   // editor should be open by default
   editorIsOpen: process.env.EDITOR_OPEN !== 'false',
