@@ -263,6 +263,7 @@ const settings = {
   defaultFeatures: {
     collaborators: -1,
     dropbox: true,
+    github: true,
     versioning: true,
     compileTimeout: parseIntOrFail(process.env.COMPILE_TIMEOUT || 180),
     compileGroup: 'standard',
@@ -702,14 +703,16 @@ if (process.env.SHARELATEX_TEMPLATES_USER_ID) {
 // -------
 if (process.env.SHARELATEX_PROXY_LEARN != null) {
   settings.proxyLearn = parse(process.env.SHARELATEX_PROXY_LEARN)
+  docURL = 'https://www.overleaf.com/learn'
   if (settings.proxyLearn) {
-    settings.nav.header_extras = [
-      {
-        url: '/learn',
-        text: 'documentation',
-      },
-    ].concat(settings.nav.header_extras || [])
+    docURL = '/learn'
   }
+  settings.nav.header_extras = [
+    {
+      url: docURL,
+      text: 'documentation',
+    },
+  ].concat(settings.nav.header_extras || [])
 }
 
 // /References
